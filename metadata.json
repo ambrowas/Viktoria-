@@ -1,0 +1,5 @@
+{
+  "name": "Viktoria, The GameShow",
+  "description": "An Electron application for creating, managing, and combining different types of quiz games for a custom game show experience, powered by Gemini for question generation and Firebase for data storage.",
+  "requestFramePermissions": []
+}

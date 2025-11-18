@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =====================================
+   VIKTORIA DARK THEME GLOBAL STYLING
+   ===================================== */
+:root {
+  --vikt-bg-input: #1e293b;
+  --vikt-border-input: #334155;
+  --vikt-text-input: #f8fafc;
+  --vikt-placeholder: #94a3b8;
+}
+
+/* Dark mode inputs, selects, and textareas */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: var(--vikt-bg-input) !important;
+  color: var(--vikt-text-input) !important;
+  border: 1px solid var(--vikt-border-input) !important;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--vikt-placeholder) !important;
+}
+
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+  outline: 2px solid #fca311 !important;
+  box-shadow: 0 0 10px #fca311aa;
+}

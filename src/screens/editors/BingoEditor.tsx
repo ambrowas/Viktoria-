@@ -1,0 +1,195 @@
+// src/screens/editors/BingoEditor.tsx
+import React, { useState } from "react";
+import { v4 as uuid } from "uuid";
+import { GameType, GameBase } from "@/types";
+import { db } from "@/services/firebase";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { generateBingoData } from "@/services/geminiService";
+
+/* ----------------------------
+   🎯 TYPE DEFINITIONS
+----------------------------- */
+export interface BingoCard {
+  id: string;
+  grid: number[][]; // 5x5 numeric matrix
+  hasFreeSpace?: boolean;
+}
+
+export interface BingoRound {
+  id: string;
+  topic: string;
+  mode: "CLASSIC" | "90BALL" | "CONCEPTUAL";
+  cards: BingoCard[];
+  createdAt: string;
+}
+
+export interface BingoGame extends GameBase {
+  type: GameType.BINGO;
+  round: BingoRound | null;
+}
+
+/* ----------------------------
+   🎨 COMPONENT
+----------------------------- */
+interface Props {
+  game: BingoGame;
+  setGame: (g: BingoGame) => void;
+}
+
+const BingoEditor: React.FC<Props> = ({ game, setGame }) => {
+  const [topic, setTopic] = useState(game.description || "");
+  const [mode, setMode] = useState<"CLASSIC" | "90BALL" | "CONCEPTUAL">("CLASSIC");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  /* ----------------------------
+     🤖 GENERATE CARDS (AI OR MOCK)
+  ----------------------------- */
+ const handleGenerate = async () => {
+  setLoading(true);
+  setError(null);
+
+  try {
+    const result = await generateBingoData(topic, mode, "en");
+    console.log("🎯 Bingo data received:", result);
+
+    const cards: BingoCard[] =
+      result.cards?.map((grid: number[][]) => ({
+        id: uuid(),
+        // ✅ wrap each row as an object instead of nested arrays
+        grid: grid.map((row) => row.map((n) => Number(n))),
+        hasFreeSpace: true,
+      })) || [];
+
+    const newRound: BingoRound = {
+      id: uuid(),
+      topic,
+      mode,
+      cards,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedGame: BingoGame = {
+      ...game,
+      description: topic,
+      round: newRound,
+    };
+
+    setGame(updatedGame);
+
+    // ✅ Serialize grid for Firestore (avoid nested arrays)
+    const serializedCards = newRound.cards.map((card) => ({
+      id: card.id,
+      hasFreeSpace: card.hasFreeSpace,
+      grid: card.grid.map((row) => ({ row })), // 👈 wrap row array into object
+    }));
+
+    await addDoc(collection(db, "bingoRounds"), {
+      id: newRound.id,
+      topic: newRound.topic,
+      mode: newRound.mode,
+      cards: serializedCards,
+      createdAt: serverTimestamp(),
+    });
+
+    console.log("✅ Saved Bingo round to Firestore:", newRound);
+  } catch (err: any) {
+    console.error("❌ Bingo generation failed:", err);
+    setError("Error generating Bingo cards. Try again.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+  /* ----------------------------
+     🧱 UI LAYOUT
+  ----------------------------- */
+  return (
+    <div className="p-6 bg-base-200 rounded-lg shadow-lg space-y-6 text-white">
+      <h2 className="text-2xl font-bold">🎯 Bingo Game Editor</h2>
+      <p className="text-gray-400 mb-2">
+        Create a Bingo game — classic (75-ball), 90-ball, or conceptual (words, ideas, trivia categories).
+      </p>
+
+      {/* Topic / Theme */}
+      <div>
+        <label className="block text-gray-300 mb-1">Topic / Theme</label>
+        <input
+          type="text"
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          placeholder="e.g., African Capitals, Inventions, Proverbs..."
+          className="w-full p-2 rounded bg-base-100 border border-gray-700"
+        />
+      </div>
+
+      {/* Mode Selector */}
+      <div>
+        <label className="block text-gray-300 mb-1">Mode</label>
+        <select
+          value={mode}
+          onChange={(e) => setMode(e.target.value as "CLASSIC" | "90BALL" | "CONCEPTUAL")}
+          className="w-full p-2 rounded bg-base-100 border border-gray-700"
+        >
+          <option value="CLASSIC">Classic 75-Ball</option>
+          <option value="90BALL">90-Ball (UK Style)</option>
+          <option value="CONCEPTUAL">Conceptual (words or categories)</option>
+        </select>
+      </div>
+
+      {/* Generate Button */}
+      <button
+        onClick={handleGenerate}
+        disabled={loading}
+        className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded font-bold"
+      >
+        {loading ? "Generating..." : "🎲 Generate Bingo Cards"}
+      </button>
+
+      {/* Error Message */}
+      {error && <p className="text-red-500 font-semibold">{error}</p>}
+
+      {/* Cards Preview */}
+      {game.round?.cards?.length ? (
+        <div className="mt-6 space-y-6">
+          <h3 className="text-xl font-semibold mb-2">
+            🎟️ Generated Cards ({game.round.cards.length})
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            {game.round.cards.map((card) => (
+              <div
+                key={card.id}
+                className="bg-base-300 border border-gray-700 rounded-lg p-3 shadow"
+              >
+                <table className="w-full text-center border-collapse">
+                  <tbody>
+                    {card.grid.map((row, rIdx) => (
+                      <tr key={rIdx}>
+                        {row.map((num, cIdx) => (
+                          <td
+                            key={cIdx}
+                            className={`w-10 h-10 border border-gray-600 ${
+                              num === 0 ? "bg-yellow-600 text-black font-bold" : "bg-gray-800"
+                            }`}
+                          >
+                            {num === 0 ? "★" : num}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="text-gray-400 italic mt-4">
+          No cards generated yet. Click “Generate Bingo Cards” to begin.
+        </p>
+      )}
+    </div>
+  );
+};
+
+export default BingoEditor;
