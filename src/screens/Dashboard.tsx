@@ -18,6 +18,8 @@ interface DashboardProps {
   shows: Show[];
   setScreen: (screen: Screen) => void;
   startNewGame: () => void;
+  isDark: boolean;
+  toggleTheme: () => void;
 }
 
 const translations = {
@@ -94,6 +96,8 @@ const ActionButton: React.FC<{
 const Dashboard: React.FC<DashboardProps> = ({
   games,
   shows,
+  isDark,
+  toggleTheme,
   setScreen,
   startNewGame,
 }) => {
@@ -128,31 +132,42 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className="text-text-secondary mt-2">{t.subtitle}</div>
         </div>
 
-        {/* 🌐 Language toggle with FlagCDN flags */}
-        <button
-          onClick={toggleLanguage}
-          className="flex items-center gap-2 bg-base-200 px-4 py-2 rounded-lg hover:bg-base-300 transition-colors duration-200"
-        >
-          {lang === "en" ? (
-            <>
-              <img
-                src="https://flagcdn.com/us.svg"
-                alt="English"
-                className="w-6 h-4 rounded-sm"
-              />
-              <span className="text-sm font-semibold">English</span>
-            </>
-          ) : (
-            <>
-              <img
-                src="https://flagcdn.com/gq.svg"
-                alt="Español (Guinea Ecuatorial)"
-                className="w-6 h-4 rounded-sm"
-              />
-              <span className="text-sm font-semibold">Español</span>
-            </>
-          )}
-        </button>
+        <div className="flex items-center gap-3">
+          {/* 🌐 Language toggle with FlagCDN flags */}
+          <button
+            onClick={toggleLanguage}
+            className="flex items-center gap-2 bg-base-200 px-4 py-2 rounded-lg hover:bg-base-300 transition-colors duration-200"
+          >
+            {lang === "en" ? (
+              <>
+                <img
+                  src="https://flagcdn.com/us.svg"
+                  alt="English"
+                  className="w-6 h-4 rounded-sm"
+                />
+                <span className="text-sm font-semibold">English</span>
+              </>
+            ) : (
+              <>
+                <img
+                  src="https://flagcdn.com/gq.svg"
+                  alt="Español (Guinea Ecuatorial)"
+                  className="w-6 h-4 rounded-sm"
+                />
+                <span className="text-sm font-semibold">Español</span>
+              </>
+            )}
+          </button>
+
+          {/* 🌓 Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            className="flex items-center gap-2 bg-base-200 px-3 py-2 rounded-lg hover:bg-base-300 transition-colors duration-200 text-sm font-semibold"
+          >
+            <span>{isDark ? "🌙" : "☀️"}</span>
+            <span>{isDark ? "Dark" : "Light"}</span>
+          </button>
+        </div>
       </header>
 
       {/* ================= STATS ================= */}

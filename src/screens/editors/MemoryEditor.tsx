@@ -1,13 +1,11 @@
-// src/screens/editors/MemoryEditor.tsx
-
 import React, { useState } from "react";
 import type { Game, MemoryGame, MemoryTile } from "@/types";
 import { generateMemoryIcons } from "@services/geminiService";
+import { useLanguage } from "@/context/LanguageContext";
 import Spinner from "@components/Spinner";
 import { SparklesIcon } from "@components/icons/IconDefs";
 import Modal from "@components/Modal";
 import MemoryPreview from "@screens/editors/MemoryPreview";
-import { uploadImageAndGetUrl } from "../../services/storage";
 
 
 
@@ -24,6 +22,7 @@ interface MemoryEditorProps {
 }
 
 const MemoryEditor: React.FC<MemoryEditorProps> = ({ game, setGame }) => {
+  const { lang } = useLanguage();
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiTheme, setAiTheme] = useState("");
@@ -56,7 +55,14 @@ const MemoryEditor: React.FC<MemoryEditorProps> = ({ game, setGame }) => {
     setIsGenerating(true);
     setError("");
     try {
-      const icons = await generateMemoryIcons(aiTheme, numPairs);
+      const result = await generateMemoryIcons(aiTheme, numPairs, lang);
+      if (result.error && result.error.includes("GEMINI_QUOTA_EXCEEDED")) {
+        setError("AI quota reached. Using diverse fallback emojis so you can keep creating!");
+      } else if (result.error) {
+        throw new Error(result.error);
+      }
+
+      const icons = result.data || [];
       const newTiles: MemoryTile[] = icons.flatMap((icon) => {
         const matchId = crypto.randomUUID();
         return [
@@ -66,47 +72,59 @@ const MemoryEditor: React.FC<MemoryEditorProps> = ({ game, setGame }) => {
       });
       updateGame({ tiles: newTiles });
       setIsPreviewing(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error occurred.");
+    } catch (err: any) {
+      if (err.message?.includes("GEMINI_QUOTA_EXCEEDED")) {
+        setError("Has superado la cuota de la IA. ¡No te preocupes! Hemos usado un set de iconos de emergencia para tu juego.");
+      } else {
+        setError(err instanceof Error ? err.message : "Error desconocido al generar iconos.");
+      }
     } finally {
       setIsGenerating(false);
     }
   };
 
   // ---------- NEW: Handles Upload to Firebase Storage and persist URLs --------
-const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const files = e.target.files;
-  if (!files || files.length === 0) return;
-  if (files.length !== numPairs) {
-    alert(`Please select exactly ${numPairs} images for a ${gridSize} grid.`);
-    return;
-  }
-  setIsGenerating(true);
-  setError("");
-  try {
-    const arrFiles = Array.from(files);
-    const currGameId = game.id || crypto.randomUUID();
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    if (files.length !== numPairs) {
+      alert(`Please select exactly ${numPairs} images for a ${gridSize} grid.`);
+      return;
+    }
+    setIsGenerating(true);
+    setError("");
+    try {
+      const arrFiles = Array.from(files);
+      const currGameId = game.id || crypto.randomUUID();
 
-    const uploadResults = await Promise.all(
-      arrFiles.map(async (file) => {
-        const matchId = crypto.randomUUID();
-        const url = await uploadImageAndGetUrl(file, currGameId, matchId);
-        return [
-          { id: crypto.randomUUID(), matchId, content: url, sourceType: "UPLOAD" as const },
-          { id: crypto.randomUUID(), matchId, content: url, sourceType: "UPLOAD" as const },
-        ];
-      })
-    );
+      const readAsDataUrl = (file: File) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
 
-    const newTiles: MemoryTile[] = uploadResults.flat();
-    updateGame({ id: currGameId, tiles: newTiles });
-    setIsPreviewing(true);
-  } catch (err) {
-    setError(err instanceof Error ? err.message : "Failed to upload images. Try again.");
-  } finally {
-    setIsGenerating(false);
-  }
-};
+      const uploadResults = await Promise.all(
+        arrFiles.map(async (file) => {
+          const matchId = crypto.randomUUID();
+          const url = await readAsDataUrl(file);
+          return [
+            { id: crypto.randomUUID(), matchId, content: url, sourceType: "UPLOAD" as const },
+            { id: crypto.randomUUID(), matchId, content: url, sourceType: "UPLOAD" as const },
+          ];
+        })
+      );
+
+      const newTiles: MemoryTile[] = uploadResults.flat();
+      updateGame({ id: currGameId, tiles: newTiles });
+      setIsPreviewing(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load images. Try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -141,9 +159,8 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               <button
                 key={size}
                 onClick={() => handleGridSizeChange(size)}
-                className={`py-2 px-4 rounded-lg font-semibold ${
-                  gridSize === size ? "bg-brand-primary text-white" : "bg-base-300"
-                }`}
+                className={`py-2 px-4 rounded-lg font-semibold ${gridSize === size ? "bg-brand-primary text-white" : "bg-base-300"
+                  }`}
                 aria-label={`Select ${size} grid`}
                 title={`Select ${size} grid`}
               >
@@ -158,9 +175,8 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           <div className="flex gap-2">
             <button
               onClick={() => handleSourceChange("AI")}
-              className={`py-2 px-4 rounded-lg font-semibold flex-1 ${
-                game.tileSource === "AI" ? "bg-brand-primary text-white" : "bg-base-300"
-              }`}
+              className={`py-2 px-4 rounded-lg font-semibold flex-1 ${game.tileSource === "AI" ? "bg-brand-primary text-white" : "bg-base-300"
+                }`}
               aria-label="Use AI-generated icons"
               title="Use AI-generated icons"
             >
@@ -168,9 +184,8 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             </button>
             <button
               onClick={() => handleSourceChange("UPLOAD")}
-              className={`py-2 px-4 rounded-lg font-semibold flex-1 ${
-                game.tileSource === "UPLOAD" ? "bg-brand-primary text-white" : "bg-base-300"
-              }`}
+              className={`py-2 px-4 rounded-lg font-semibold flex-1 ${game.tileSource === "UPLOAD" ? "bg-brand-primary text-white" : "bg-base-300"
+                }`}
               aria-label="Upload your own images"
               title="Upload your own images"
             >

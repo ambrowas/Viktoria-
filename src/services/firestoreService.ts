@@ -1,14 +1,11 @@
-import { db } from "@/services/firebase";
-import {
-  collection,
-  getDocs,
-  doc,
-  getDoc,
-  setDoc,
-  deleteDoc,
-  updateDoc,
-} from "firebase/firestore";
+// Deprecated Firestore service; kept as a stub to avoid crashes if imported.
+// All game data is now stored locally via Electron IPC.
 import { Game, GameType } from "@/types";
+
+const noOp = async (..._args: any[]) => {
+  console.warn("Firestore service is deprecated; no-op called.");
+  return undefined;
+};
 
 /**
  * Safely normalize any Firestore value into a clean uppercase string.
@@ -42,85 +39,26 @@ function normalizeFirestoreType(raw: any): GameType {
  * Fetch all games from Firestore.
  */
 export async function fetchGames(): Promise<Game[]> {
-  try {
-    const snapshot = await getDocs(collection(db, "games"));
-    return snapshot.docs.map((d) => {
-      const data = JSON.parse(JSON.stringify(d.data())); // strip Firestore proxies
-
-      return {
-        id: d.id,
-        ...data,
-        type: normalizeFirestoreType(data.type),
-      } as Game;
-    });
-  } catch (error) {
-    console.error("❌ [FirestoreService] Error fetching games:", error);
-    return [];
-  }
+  console.warn("fetchGames called on deprecated Firestore service. Returning empty list.");
+  return [];
 }
 
 /**
  * Fetch a single game by ID.
  */
-export async function fetchGameById(id: string): Promise<Game | null> {
-  try {
-    const ref = doc(db, "games", id);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return null;
-
-    const data = JSON.parse(JSON.stringify(snap.data())); // plain JSON
-    return {
-      id: snap.id,
-      ...data,
-      type: normalizeFirestoreType(data.type),
-    } as Game;
-  } catch (error) {
-    console.error("❌ [FirestoreService] Error fetching game:", error);
-    return null;
-  }
-}
+export const fetchGameById = noOp;
 
 /**
  * Save or overwrite a game in Firestore.
  */
-export async function saveGame(game: Game): Promise<void> {
-  try {
-    const id = game.id || crypto.randomUUID();
-    await setDoc(doc(db, "games", id), {
-      ...game,
-      id,
-      type: game.type,
-    });
-    console.log("💾 [FirestoreService] Saved game:", id, game.type);
-  } catch (error) {
-    console.error("❌ [FirestoreService] Error saving game:", error);
-    throw error;
-  }
-}
+export const saveGame = noOp;
 
 /**
  * Update a subset of fields in an existing game.
  */
-export async function updateGame(id: string, updates: Partial<Game>): Promise<void> {
-  try {
-    const ref = doc(db, "games", id);
-    await updateDoc(ref, updates);
-    console.log("✏️ [FirestoreService] Updated game:", id, updates);
-  } catch (error) {
-    console.error("❌ [FirestoreService] Error updating game:", error);
-    throw error;
-  }
-}
+export const updateGame = noOp;
 
 /**
  * Delete a game by ID.
  */
-export async function deleteGame(id: string): Promise<void> {
-  try {
-    await deleteDoc(doc(db, "games", id));
-    console.log("🗑️ [FirestoreService] Deleted game:", id);
-  } catch (error) {
-    console.error("❌ [FirestoreService] Error deleting game:", error);
-    throw error;
-  }
-}
+export const deleteGame = noOp;

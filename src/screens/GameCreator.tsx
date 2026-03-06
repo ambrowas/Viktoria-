@@ -15,13 +15,15 @@ import {
   PriceIsRightGame,
   WheelOfFortuneGame,
   LotteryGame,
+  JeopardyTurnMode,
 } from "@/types";
 
 import { motion } from "framer-motion";
 import Spinner from "../components/Spinner";
 import { useLanguage } from "@/context/LanguageContext";
-import { db } from "@/services/firebase";
-import { doc, setDoc } from "firebase/firestore";
+// import { doc, setDoc } from "firebase/firestore";
+// import { ref, uploadString, getDownloadURL } from "firebase/storage";
+// import { storage } from "@/utils/firebase";
 import {
   generateJeopardyCategory,
   generatePyramidQuestions,
@@ -64,6 +66,15 @@ const GameCreator: React.FC<GameCreatorProps> = ({
   const [aiTopic, setAiTopic] = useState("");
   const [aiDifficulty, setAiDifficulty] = useState("Medium");
   const [error, setError] = useState("");
+
+  // Placeholder for storage reference since we removed the import
+  const storage = null;
+
+  const uploadDataUrlToStorage = async (dataUrl: string) => {
+    // Firebase storage is not configured.
+    // We rely on local persistence via Electron IPC in persistDataUrlsForGame.
+    return null;
+  };
 
   // ============================
   // Logging
@@ -146,60 +157,147 @@ const GameCreator: React.FC<GameCreatorProps> = ({
   // Firestore Save
   // ============================
 
-  // 🔧 Helper to remove nested arrays before saving
-function sanitizeForFirestore(obj: any): any {
-  if (Array.isArray(obj)) {
-    // detect nested arrays
-    if (obj.length > 0 && Array.isArray(obj[0])) {
-      // convert [[...],[...]] → [{ row: [...] }, ...]
-      return obj.map((row) => ({ row: sanitizeForFirestore(row) }));
-    }
-    // otherwise sanitize each element
-    return obj.map(sanitizeForFirestore);
-  } else if (obj && typeof obj === "object") {
-    const sanitized: Record<string, any> = {};
-    for (const [k, v] of Object.entries(obj)) {
-      sanitized[k] = sanitizeForFirestore(v);
-    }
-    return sanitized;
-  }
-  return obj;
-}
+  const persistDataUrlsForGame = async (currentGame: GenericGame | null) => {
+    if (!currentGame) return { game: currentGame, failed: [] as string[], trimmed: [] as string[] };
 
- const handleSave = async () => {
-  if (!game?.name?.trim()) {
-    alert(lang === "es" ? "Por favor, ingresa un nombre." : "Please enter a name.");
-    return;
-  }
+    const cache = new Map<string, string>();
+    const failed: string[] = [];
+    const trimmed: string[] = [];
 
-  setIsSaving(true);
-  try {
-    const id = game.id || crypto.randomUUID();
-    const createdAt = game.createdAt || new Date().toISOString();
+    const persistUrl = async (url?: string) => {
+      if (!url || !url.startsWith("data:")) return url;
+      if (cache.has(url)) return cache.get(url)!;
+      try {
+        // Primary: upload to Firebase Storage to avoid bloating Firestore docs
+        const cdnUrl = await uploadDataUrlToStorage(url);
+        if (cdnUrl) {
+          cache.set(url, cdnUrl);
+          return cdnUrl;
+        }
 
-    // ✅ Deep sanitize before writing to Firestore
-    const sanitized = sanitizeForFirestore(game);
-
-    const gameToSave = {
-      ...sanitized,
-      id,
-      createdAt,
-      type: game.type,
+        // Fallback: persist to local app images folder via Electron IPC
+        if (window?.electronAPI?.invoke) {
+          const saved = await window.electronAPI.invoke("save-data-url", url);
+          if (typeof saved === "string" && saved.length > 0) {
+            cache.set(url, saved);
+            return saved;
+          }
+        } else {
+          console.warn("Electron IPC not available; cannot persist media data URLs.");
+        }
+      } catch (err) {
+        console.warn("Failed to persist data URL:", err);
+      }
+      failed.push(url.slice(0, 64)); // record a short prefix for debugging
+      return null; // signal we could not persist
     };
 
-    console.log("✅ [GameCreator] Saving sanitized data:", gameToSave);
+    if (currentGame.type === GameType.JEOPARDY) {
+      const game = currentGame as JeopardyGame;
+      const categories = await Promise.all(
+        (game.categories || []).map(async (cat) => {
+          const questions = await Promise.all(
+            (cat.questions || []).map(async (q) => {
+              const questionMediaUrl = await persistUrl(q.questionMediaUrl);
+              const answerMediaUrl = await persistUrl(q.answerMediaUrl);
+              if (q.questionMediaUrl && q.questionMediaUrl.startsWith("data:") && !questionMediaUrl) {
+                trimmed.push(q.questionMediaUrl.slice(0, 64));
+              }
+              if (q.answerMediaUrl && q.answerMediaUrl.startsWith("data:") && !answerMediaUrl) {
+                trimmed.push(q.answerMediaUrl.slice(0, 64));
+              }
+              return {
+                ...q,
+                questionMediaUrl: questionMediaUrl ?? undefined,
+                answerMediaUrl: answerMediaUrl ?? undefined,
+              };
+            })
+          );
+          return { ...cat, questions };
+        })
+      );
+      return { game: { ...game, categories }, failed, trimmed };
+    }
 
-    await setDoc(doc(db, "games", id), gameToSave);
-    await onSave(gameToSave as Game);
+    return { game: currentGame, failed, trimmed };
+  };
 
-    console.log("🎉 [GameCreator] Saved successfully:", gameToSave.type);
-  } catch (err) {
-    console.error("❌ Firestore Save Error:", err);
-    alert(lang === "es" ? "Error guardando el juego." : "Error saving the game.");
-  } finally {
-    setIsSaving(false);
+  // 🔧 Helper to remove Firestore‑unsupported values before saving
+  function sanitizeForFirestore(obj: any): any {
+    // Arrays (including potential nested arrays)
+    if (Array.isArray(obj)) {
+      const containsArray = obj.some((item) => Array.isArray(item));
+      if (containsArray) {
+        // convert any nested array element into an object wrapper to comply with Firestore rules
+        return obj.map((item) =>
+          Array.isArray(item) ? { row: sanitizeForFirestore(item) } : sanitizeForFirestore(item)
+        );
+      }
+      return obj
+        .map((item) => sanitizeForFirestore(item))
+        .filter((item) => item !== undefined); // drop undefined slots
+    }
+
+    // Sets → Arrays
+    if (obj instanceof Set) {
+      return Array.from(obj).map((item) => sanitizeForFirestore(item));
+    }
+
+    // Plain objects: drop undefined / functions, sanitize nested structures
+    if (obj && typeof obj === "object") {
+      const sanitized: Record<string, any> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (v === undefined || typeof v === "function") continue; // Firestore does not allow undefined/functions
+        sanitized[k] = sanitizeForFirestore(v);
+      }
+      return sanitized;
+    }
+
+    // primitives (string/number/boolean/null) pass through
+    return obj;
   }
-};
+
+  const handleSave = async () => {
+    if (!game?.name?.trim()) {
+      alert(lang === "es" ? "Por favor, ingresa un nombre." : "Please enter a name.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // The logic to persist data URLs and sanitize the game object is complex
+      // and critical. It remains here to ensure the game object is fully prepared
+      // before being passed up to the parent for saving.
+      const { game: mediaSafeGame, failed } = await persistDataUrlsForGame(game);
+      if (failed.length) {
+        alert(
+          lang === "es"
+            ? "No se pudo guardar uno o más archivos multimedia. Vuelve a seleccionarlos e inténtalo de nuevo."
+            : "One or more media files could not be saved. Please re-select them and try again."
+        );
+        setIsSaving(false);
+        return;
+      }
+
+      const id = game.id || crypto.randomUUID();
+      const createdAt = game.createdAt || new Date().toISOString();
+      const slug = game.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "") || id;
+
+      const rawToSave = { ...(mediaSafeGame || game), id, createdAt, slug, type: (mediaSafeGame || game)?.type };
+      const gameToSave = sanitizeForFirestore(rawToSave);
+
+      // The sole responsibility is now to pass the prepared game object to the parent.
+      // The parent component (`App.tsx`) will handle the actual saving via the service.
+      await onSave(gameToSave as Game);
+
+      console.log("🎉 [GameCreator] Sent save request to parent for:", gameToSave.type);
+    } catch (err) {
+      console.error("❌ GameCreator Save Prep Error:", err);
+      alert(lang === "es" ? "Error preparando el juego para guardar." : "Error preparing the game for saving.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
 
   // ============================
@@ -211,10 +309,18 @@ function sanitizeForFirestore(obj: any): any {
     setIsGenerating(true);
 
     try {
-      const { name, questions } = await generateJeopardyCategory(aiTopic, aiDifficulty);
+      const response = await generateJeopardyCategory(aiTopic, aiDifficulty);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      const { name, questions } = response.data || { name: "", questions: [] };
+      if (!questions.length) throw new Error("No category generated.");
+
       const newCategory: JeopardyCategory = {
         id: crypto.randomUUID(),
-        name,
+        name: name || aiTopic,
         questions: questions.map((q) => ({ ...q, id: crypto.randomUUID() })),
       };
       const current = (game as JeopardyGame).categories || [];
@@ -237,7 +343,15 @@ function sanitizeForFirestore(obj: any): any {
     setIsGenerating(true);
 
     try {
-      const questions = await generatePyramidQuestions(aiTopic, aiDifficulty);
+      const response = await generatePyramidQuestions(aiTopic, aiDifficulty);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      const questions = response.data || [];
+      if (!questions.length) throw new Error("No questions generated.");
+
       setGame({ ...game, type: GameType.PYRAMID, metadata: { questions } });
       setAiTopic("");
     } catch (err: any) {

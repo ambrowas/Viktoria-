@@ -1,20 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { PyramidGame } from "@/types";
+import { PyramidGame, PyramidQuestion } from "@/types";
 import { Trash2, Sparkles } from "lucide-react";
 import { generatePyramidQuestions } from "@/services/geminiService";
 
 interface PyramidEditorProps {
   game: PyramidGame;
   setGame: React.Dispatch<React.SetStateAction<Partial<PyramidGame> | null>>;
-}
-
-interface PyramidQuestion {
-  id: string;
-  level: number;
-  value: number;
-  question: string;
-  options: { a: string; b: string; c: string };
-  correct: "a" | "b" | "c";
 }
 
 const VALUES = [100, 200, 300, 500, 750, 1000, 2000, 3000, 5000, 10000];
@@ -62,7 +53,7 @@ const PyramidEditor: React.FC<PyramidEditorProps> = ({ game, setGame }) => {
   const updateOption = (id: string, key: "a" | "b" | "c", value: string) => {
     setQuestions((prev) =>
       prev.map((q) =>
-        q.id === id ? { ...q, options: { ...q.options, [key]: value } } : q
+        q.id === id ? { ...q, options: { ...(q.options || { a: "", b: "", c: "" }), [key]: value } } : q
       )
     );
   };
@@ -77,7 +68,13 @@ const PyramidEditor: React.FC<PyramidEditorProps> = ({ game, setGame }) => {
   const handleGenerateAll = async () => {
     try {
       setAiLoading(true);
-      const generated = await generatePyramidQuestions(aiTopic, aiDifficulty);
+      const response = await generatePyramidQuestions(aiTopic, aiDifficulty);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      const generated = response.data || [];
 
       // auto-assign ids, fallback to defaults if needed
       const merged = generated.map((q, i) => ({
@@ -90,7 +87,7 @@ const PyramidEditor: React.FC<PyramidEditorProps> = ({ game, setGame }) => {
       setQuestions(merged);
     } catch (err) {
       console.error("❌ Error generating Pyramid questions:", err);
-      alert("Error generating Pyramid questions. Try again.");
+      alert(err instanceof Error ? err.message : "Error generating Pyramid questions. Try again.");
     } finally {
       setAiLoading(false);
     }
@@ -99,7 +96,13 @@ const PyramidEditor: React.FC<PyramidEditorProps> = ({ game, setGame }) => {
   const handleGenerateOne = async (level: number) => {
     try {
       setAiLoading(true);
-      const generated = await generatePyramidQuestions(aiTopic, aiDifficulty);
+      const response = await generatePyramidQuestions(aiTopic, aiDifficulty);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      const generated = response.data || [];
       const newQ =
         generated.find((q) => q.level === level) || generated[level - 1];
 
@@ -110,18 +113,18 @@ const PyramidEditor: React.FC<PyramidEditorProps> = ({ game, setGame }) => {
         prev.map((q) =>
           q.level === level
             ? {
-                ...newQ,
-                id: q.id,
-                value: q.value,
-                options: newQ.options,
-                correct: newQ.correct,
-              }
+              ...newQ,
+              id: q.id,
+              value: q.value,
+              options: newQ.options,
+              correct: (newQ as any).correct, // Ensure type safety
+            }
             : q
         )
       );
     } catch (err) {
       console.error("❌ Error generating single question:", err);
-      alert("Error generating single question. Try again.");
+      alert(err instanceof Error ? err.message : "Error generating single question. Try again.");
     } finally {
       setAiLoading(false);
     }
@@ -140,15 +143,15 @@ const PyramidEditor: React.FC<PyramidEditorProps> = ({ game, setGame }) => {
           </p>
         </div>
         <div className="flex items-center gap-3">
-  <label className="text-sm text-gray-400">Nombre del juego:</label>
-  <input
-    type="text"
-    placeholder="Ej. Pirámide del Conocimiento"
-    value={game.name || ""}
-    onChange={(e) => setGame((prev) => ({ ...prev, name: e.target.value }))}
-    className="bg-[#151a27] border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 flex-1"
-  />
-</div>
+          <label className="text-sm text-gray-400">Nombre del juego:</label>
+          <input
+            type="text"
+            placeholder="Ej. Pirámide del Conocimiento"
+            value={game.name || ""}
+            onChange={(e) => setGame((prev) => ({ ...prev, name: e.target.value }))}
+            className="bg-[#151a27] border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 flex-1"
+          />
+        </div>
         <div className="flex gap-2 flex-wrap">
           <input
             type="text"
@@ -228,11 +231,10 @@ const PyramidEditor: React.FC<PyramidEditorProps> = ({ game, setGame }) => {
                   <input
                     type="text"
                     placeholder={`Option ${key.toUpperCase()}`}
-                    value={q.options[key]}
+                    value={q.options?.[key] || ""}
                     onChange={(e) => updateOption(q.id, key, e.target.value)}
-                    className={`flex-1 bg-[#151a27] border ${
-                      q.correct === key ? "border-blue-500" : "border-gray-700"
-                    } rounded-md px-3 py-2 text-sm text-gray-200`}
+                    className={`flex-1 bg-[#151a27] border ${q.correct === key ? "border-blue-500" : "border-gray-700"
+                      } rounded-md px-3 py-2 text-sm text-gray-200`}
                   />
                 </div>
               ))}

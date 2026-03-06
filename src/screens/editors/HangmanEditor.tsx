@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Game, HangmanGame, HangmanPhrase } from "@/types";
 import { generateHangmanPhrases } from "@services/geminiService";
+import { useLanguage } from "@/context/LanguageContext";
 import Spinner from "@components/Spinner";
 import { SparklesIcon } from "@components/icons/IconDefs";
 import Modal from "@components/Modal";
@@ -14,6 +15,7 @@ interface HangmanEditorProps {
 }
 
 const HangmanEditor: React.FC<HangmanEditorProps> = ({ game, setGame }) => {
+  const { lang: language } = useLanguage();
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiTheme, setAiTheme] = useState("");
   const [aiDifficulty, setAiDifficulty] = useState("Medium");
@@ -21,9 +23,6 @@ const HangmanEditor: React.FC<HangmanEditorProps> = ({ game, setGame }) => {
   const [newPhrase, setNewPhrase] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newHint, setNewHint] = useState("");
-
-  // ✅ Default language, consistent with other editors
-  const language = game.language || "es";
 
   // ✅ Safe updater – avoids union type conflicts
   const updateGame = (updates: Partial<HangmanGame>) => {
@@ -47,7 +46,12 @@ const HangmanEditor: React.FC<HangmanEditorProps> = ({ game, setGame }) => {
 
     try {
       const aiResponse = await generateHangmanPhrases(aiTheme, aiDifficulty, 5, language);
-      const raw = aiResponse.trim();
+
+      if (aiResponse.error) {
+        throw new Error(aiResponse.error);
+      }
+
+      const raw = (aiResponse.data || "").trim();
 
       // 🧠 Try to parse AI response robustly
       let phrases: HangmanPhrase[] = [];
@@ -154,11 +158,10 @@ const HangmanEditor: React.FC<HangmanEditorProps> = ({ game, setGame }) => {
                 <button
                   key={level}
                   onClick={() => handleDifficultyChange(level)}
-                  className={`py-2 px-4 rounded-lg font-semibold ${
-                    game.difficulty === level
-                      ? "bg-brand-primary text-white"
-                      : "bg-base-300"
-                  }`}
+                  className={`py-2 px-4 rounded-lg font-semibold ${game.difficulty === level
+                    ? "bg-brand-primary text-white"
+                    : "bg-base-300"
+                    }`}
                 >
                   {level}
                 </button>
@@ -173,11 +176,10 @@ const HangmanEditor: React.FC<HangmanEditorProps> = ({ game, setGame }) => {
                 <button
                   key={attempts}
                   onClick={() => handleMaxAttemptsChange(attempts)}
-                  className={`py-2 px-4 rounded-lg font-semibold ${
-                    game.maxAttempts === attempts
-                      ? "bg-brand-primary text-white"
-                      : "bg-base-300"
-                  }`}
+                  className={`py-2 px-4 rounded-lg font-semibold ${game.maxAttempts === attempts
+                    ? "bg-brand-primary text-white"
+                    : "bg-base-300"
+                    }`}
                 >
                   {attempts}
                 </button>

@@ -1,6 +1,7 @@
-// src/screens/editors/RoscoEditor.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import type { RoscoGame, RoscoClue } from "@/types";
+import { generateRoscoBulk } from "@/services/geminiService";
+import { useLanguage } from "@/context/LanguageContext";
 
 type Setter<T> = React.Dispatch<React.SetStateAction<T>>;
 
@@ -10,8 +11,8 @@ interface RoscoEditorProps {
 }
 
 const LETTERS_ES = [
-  "A","B","C","D","E","F","G","H","I","J","K",
-  "L","M","N","Ñ","O","P","Q","R","S","T","U","V","W","X","Y","Z",
+  "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
+  "L", "M", "N", "Ñ", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
 ] as const;
 
 function makeTemplate(): RoscoClue[] {
@@ -23,6 +24,7 @@ function makeTemplate(): RoscoClue[] {
 }
 
 export default function RoscoEditor({ game, setGame }: RoscoEditorProps) {
+  const { lang } = useLanguage();
   // seed from game or template
   const initial = useMemo<RoscoClue[]>(
     () => (Array.isArray(game?.clues) && game.clues.length ? game.clues : makeTemplate()),
@@ -32,6 +34,7 @@ export default function RoscoEditor({ game, setGame }: RoscoEditorProps) {
   const [clues, setClues] = useState<RoscoClue[]>(initial);
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // propagate up
   useEffect(() => {
@@ -56,6 +59,37 @@ export default function RoscoEditor({ game, setGame }: RoscoEditorProps) {
   const resetAZ = () => setClues(makeTemplate());
   const clearAll = () =>
     setClues((prev) => prev.map((c) => ({ ...c, answer: "", definition: "" })));
+
+  const handleGenerateAI = async () => {
+    const promptMsg = lang === "es"
+      ? "Tema o categoría para el rosco (por ejemplo, 'cultura general', 'países de África', etc.):"
+      : "Theme or category for the Rosco (e.g., 'general knowledge', 'African countries', etc.):";
+
+    const defaultTheme = lang === "es" ? "cultura general" : "general knowledge";
+
+    const theme = window.prompt(promptMsg, defaultTheme);
+    if (theme === null) return;
+
+    try {
+      setIsGenerating(true);
+      const response = await generateRoscoBulk(theme, lang);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      const text = response.data || "";
+      setBulkText(text);
+      setShowBulk(true);
+    } catch (err: any) {
+      console.error(err);
+      alert(
+        err.message || "No se pudo generar el rosco automáticamente. Intenta de nuevo o revisa tu conexión."
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const applyBulk = () => {
     // Expect lines like:  A; Árbol; Planta leñosa...
@@ -121,6 +155,15 @@ export default function RoscoEditor({ game, setGame }: RoscoEditorProps) {
             title="Pegado masivo"
           >
             Pegado masivo
+          </button>
+          <button
+            type="button"
+            onClick={handleGenerateAI}
+            disabled={isGenerating}
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white px-3 py-2 rounded-md"
+            title="Generar automáticamente con Gemini"
+          >
+            {isGenerating ? "Generando..." : "IA (Gemini)"}
           </button>
           <button
             type="button"

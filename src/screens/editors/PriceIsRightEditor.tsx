@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import { PriceIsRightGame } from "@/types";
+import { useLanguage } from "@/context/LanguageContext";
+import { generatePriceIsRightItems } from "@/services/geminiService";
 
 // -------- Image fetching with robust fallbacks & caching --------
 const UNSPLASH_ACCESS_KEY = "i5m0x3TFiqwLqXpcGHKbHF6BLZtPdHIF0TAvec1VYQA";
 const FALLBACK_IMG =
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/480px-No_image_available.svg.png";
+  "https://placehold.co/600x400/1e293b/ffffff?text=Imagen+no+disponible";
 
 const memCache: Record<string, string> = {};
 const LS_KEY = "pir_image_cache_v1";
@@ -20,7 +22,7 @@ function loadCache(): Record<string, string> {
 function saveCache(cache: Record<string, string>) {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(cache));
-  } catch {}
+  } catch { }
 }
 
 /** Primary: Openverse (no auth required) */
@@ -68,11 +70,11 @@ async function fetchItemImage(keywordRaw: string): Promise<string> {
   let url: string | null = null;
   try {
     url = await fromOpenverse(keyword);
-  } catch {}
+  } catch { }
   if (!url) {
     try {
       url = await fromUnsplash(keyword);
-    } catch {}
+    } catch { }
   }
   if (!url) url = FALLBACK_IMG;
 
@@ -91,6 +93,7 @@ interface Props {
 }
 
 export default function PriceIsRightEditor({ game, setGame }: Props) {
+  const { lang } = useLanguage();
   const [aiTopic, setAiTopic] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -118,38 +121,24 @@ export default function PriceIsRightEditor({ game, setGame }: Props) {
 
   // === AI: Generate bulk items ===
   const generateBulkItems = async () => {
-    if (!aiTopic.trim()) return alert("Enter a topic first!");
+    if (!aiTopic.trim()) return alert(lang === "es" ? "¡Introduce un tema!" : "Enter a topic first!");
     setIsGenerating(true);
     try {
-      const prompt = `
-Generate between 1 and 10 items (default 5) for a Price Is Right style game about "${aiTopic}".
-Return ONLY JSON: 
-[
-  { "name": "Smart TV", "description": "55-inch 4K OLED television", "actualPrice": 899 }
-]
-      `;
-      const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=AIzaSyA467JQH72xz6LwPsSWgjHcbGRvAQuvnnY", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      });
-      const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const parsed = JSON.parse(
-        text
-          .replace(/```json/i, "")
-          .replace(/```/g, "")
-          .trim()
-      );
-      const items = Array.isArray(parsed) ? parsed.slice(0, 10) : [];
+      const response = await generatePriceIsRightItems(aiTopic, 5, lang);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      const items = response.data || [];
       for (const item of items) {
         item.id = crypto.randomUUID();
         item.imageUrl = await fetchItemImage(item.name);
       }
       setGame({ ...game, items });
-    } catch (e) {
+    } catch (e: any) {
       console.error("AI generation error:", e);
-      alert("Failed to generate items.");
+      alert(e.message || "Failed to generate items.");
     } finally {
       setIsGenerating(false);
     }

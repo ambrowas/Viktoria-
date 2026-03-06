@@ -1,14 +1,4 @@
-import { initializeApp } from "firebase/app";
-import {
-  getFirestore,
-  doc,
-  setDoc,
-  deleteDoc,
-  collection,
-  getDocs,
-  orderBy,
-  query,
-} from "firebase/firestore";
+// Stubbed Firebase service — all game data is handled locally via Electron IPC.
 import {
   Game,
   GameType,
@@ -24,23 +14,10 @@ import {
   WheelOfFortuneGame,
   LotteryGame,
   BingoGame,
-
 } from "@/types";
 
-// --- Firebase config
-const firebaseConfig = {
-  apiKey: "AIzaSyCfNNcIK2WR3ONNnlEDvolCw4Fn4-uheD0",
-  authDomain: "viktoria-226cf.firebaseapp.com",
-  databaseURL: "https://viktoria-226cf-default-rtdb.firebaseio.com",
-  projectId: "viktoria-226cf",
-  storageBucket: "viktoria-226cf.firebasestorage.app",
-  messagingSenderId: "700359701423",
-  appId: "1:700359701423:web:dd79ad17482d07e4a8355a",
-  measurementId: "G-Q49EXYJWTD",
-};
-
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+export const db = undefined as any;
+export const storage = undefined as any;
 
 // ---------------------------------------------
 // Normalize raw Firestore data -> strict Game
@@ -238,17 +215,34 @@ export function coerceGame(raw: any, idFromDoc?: string): Game {
 // ---------------------------------------------
 // CRUD
 // ---------------------------------------------
+// Deprecated Firebase methods — now routed to local disk via Electron IPC.
+// Kept for compatibility with existing callers, but no Firestore traffic.
+
 export const saveGame = async (game: Game): Promise<void> => {
-  const ref = doc(db, "games", game.id);
-  await setDoc(ref, game, { merge: true });
+  if (window?.electronAPI?.invoke) {
+    await window.electronAPI.invoke("save-game-local", {
+      slug: game.slug || game.id || "game",
+      game,
+    });
+    return;
+  }
+  // Fallback: no-op to avoid crashes when Electron IPC not available
+  console.warn("Electron IPC unavailable; saveGame is a no-op.");
 };
 
 export const deleteGame = async (gameId: string): Promise<void> => {
-  await deleteDoc(doc(db, "games", gameId));
+  if (window?.electronAPI?.invoke) {
+    await window.electronAPI.invoke("delete-game-local", { id: gameId });
+    return;
+  }
+  console.warn("Electron IPC unavailable; deleteGame is a no-op.");
 };
 
 export const loadGames = async (): Promise<Game[]> => {
-  const q = query(collection(db, "games"), orderBy("createdAt", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => coerceGame(d.data(), d.id));
+  if (window?.electronAPI?.invoke) {
+    const games = await window.electronAPI.invoke("list-games-local");
+    return Array.isArray(games) ? games.map((g: any) => coerceGame(g, g.id)) : [];
+  }
+  console.warn("Electron IPC unavailable; loadGames returning empty list.");
+  return [];
 };

@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Game, GameType } from "@/types";
-import { Play, Edit2, Trash2, Filter, Search, PlusCircle } from "lucide-react";
+import { Play, Edit2, Trash2, Filter, Search, PlusCircle, Zap } from "lucide-react";
 
 interface LibraryProps {
   games: Game[];
   onPlay: (game: Game) => void;
+  onQuickPlay: (game: Game, numTeams: number) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onCreateNew: () => void;
@@ -28,6 +29,7 @@ const typeColors: Record<string, string> = {
 const GameLibrary: React.FC<LibraryProps> = ({
   games,
   onPlay,
+  onQuickPlay,
   onEdit,
   onDelete,
   onCreateNew,
@@ -35,6 +37,10 @@ const GameLibrary: React.FC<LibraryProps> = ({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"ALL" | GameType>("ALL");
   const [visibleCount, setVisibleCount] = useState(9);
+
+  // 🏁 Quick Play state
+  const [quickPlayGame, setQuickPlayGame] = useState<Game | null>(null);
+  const [quickPlayTeams, setQuickPlayTeams] = useState(2);
 
   // 🧠 Log once when games update
   useEffect(() => {
@@ -142,6 +148,13 @@ const GameLibrary: React.FC<LibraryProps> = ({
                   <Play size={16} />
                 </button>
                 <button
+                  onClick={() => setQuickPlayGame(game)}
+                  title="Partida Rápida (con Equipos)"
+                  className="p-2 border border-gray-600 rounded-md hover:border-[#facc15] hover:text-[#facc15] transition"
+                >
+                  <Zap size={16} />
+                </button>
+                <button
                   onClick={() => onEdit(game.id)}
                   title="Editar"
                   className="p-2 border border-gray-600 rounded-md hover:border-[#b7791f] hover:text-[#b7791f] transition"
@@ -177,6 +190,51 @@ const GameLibrary: React.FC<LibraryProps> = ({
           >
             Cargar más
           </button>
+        </div>
+      )}
+
+      {/* 🏁 Quick Play Team Selection Modal */}
+      {quickPlayGame && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+          <div className="bg-[#1b2132] border border-[#2f3b57] rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center">
+            <h3 className="text-2xl font-bold mb-2 text-white">⚡️ Partida Rápida</h3>
+            <p className="text-gray-400 text-sm mb-6">
+              Selecciona cuántos equipos participarán en "{quickPlayGame.name}"
+            </p>
+
+            <div className="flex justify-center gap-4 mb-8">
+              {[2, 3, 4].map((num) => (
+                <button
+                  key={num}
+                  onClick={() => setQuickPlayTeams(num)}
+                  className={`w-14 h-14 rounded-xl font-bold text-xl transition-all border-2 ${quickPlayTeams === num
+                      ? "bg-yellow-400 border-yellow-300 text-black scale-110 shadow-[0_0_20px_rgba(250,204,21,0.4)]"
+                      : "bg-[#2b3247] border-[#2f3b57] text-gray-400 hover:border-gray-500"
+                    }`}
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => {
+                  onQuickPlay(quickPlayGame, quickPlayTeams);
+                  setQuickPlayGame(null);
+                }}
+                className="w-full py-3 bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-xl transition-colors shadow-lg"
+              >
+                ¡Comenzar Juego!
+              </button>
+              <button
+                onClick={() => setQuickPlayGame(null)}
+                className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -25,7 +25,7 @@ export default function PriceIsRightGame({ game, onClose }: Props) {
   // ===== AUTO ENTER FULLSCREEN =====
   useEffect(() => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
+      document.documentElement.requestFullscreen().catch(() => { });
     }
   }, []);
 
@@ -63,7 +63,7 @@ export default function PriceIsRightGame({ game, onClose }: Props) {
   function handleExit() {
     timerSound.stop();
     if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
+      document.exitFullscreen().catch(() => { });
     }
     if (onClose) onClose();
   }
@@ -171,7 +171,7 @@ export default function PriceIsRightGame({ game, onClose }: Props) {
                 className="w-[50%] h-[500px] object-cover rounded-xl border border-gray-700 mr-10"
                 onError={(e) => {
                   e.currentTarget.src =
-                    "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/480px-No_image_available.svg.png";
+                    "https://placehold.co/600x400/1e293b/ffffff?text=Imagen+no+disponible";
                 }}
               />
             )}

@@ -107,3 +107,35 @@ export const suspenseSound = createSound("suspense.mp3", false, 0.75);
  * 🧰 Export Helper
  * --------------------------- */
 export { createSound };
+
+// Convenience: stop all known sounds (used when leaving a game)
+export const stopAllSounds = () => {
+  [
+    flipSound,
+    correctSound,
+    wrongSound,
+    winSound,
+    loseSound,
+    timerSound,
+    victorySound,
+    transitionSound,
+    plotagonSound,
+    countdownSound,
+    correctoSound,
+    strikeSound,
+    roundWinSound,
+    familyfeud,
+    buzzerSound,
+    failureSound,
+    magicalSound,
+    violinSound,
+    spinSound,
+    reveal1Sound,
+    reveal2Sound,
+    reveal3Sound,
+    reveal4Sound,
+    reveal5Sound,
+    jackpotSound,
+    suspenseSound,
+  ].forEach((s) => s.stop());
+};

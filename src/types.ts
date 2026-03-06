@@ -32,6 +32,7 @@ export interface GameBase {
   type: GameType; // ✅ Keep this broad
   description: string;
   createdAt: string;
+  slug?: string;
 }
 // -----------------------------
 // Pyramid Game
@@ -88,6 +89,7 @@ export interface JeopardyQuestion {
   type?: "DIRECT" | "MULTIPLE_CHOICE";
   options?: string[];
   explanation?: string;
+  explanationPlacement?: "WITH_QUESTION" | "WITH_ANSWER";
   questionMediaUrl?: string;
   questionMediaType?: "IMAGE" | "AUDIO" | "VIDEO";
   answerMediaUrl?: string;
@@ -100,9 +102,18 @@ export interface JeopardyCategory {
   questions: JeopardyQuestion[];
 }
 
+export enum JeopardyTurnMode {
+  CONTINUE_ON_CORRECT = "CONTINUE_ON_CORRECT",
+  ALTERNATE_AFTER_QUESTION = "ALTERNATE_AFTER_QUESTION",
+}
+
 export interface JeopardyGame extends GameBase {
   type: GameType.JEOPARDY;
   categories: JeopardyCategory[];
+  teams: [string, string];
+  turnMode?: JeopardyTurnMode;
+  allowRebounds?: boolean;
+  cluesPerTeam?: number;
 }
 
 // -----------------------------
@@ -206,22 +217,22 @@ export interface PriceIsRightGame extends GameBase {
   items: PriceItem[];
 }
 
-  // -----------------------------
-  // Wheel of Fortune
-  // -----------------------------
-  export interface WheelRound {
-    id: string;
-    category: string;
-    puzzle: string;
-    prizeValue: number;
-    revealed?: Set<string>;
-  }
+// -----------------------------
+// Wheel of Fortune
+// -----------------------------
+export interface WheelRound {
+  id: string;
+  category: string;
+  puzzle: string;
+  prizeValue: number;
+  revealed?: Set<string>;
+}
 
 
-  export interface WheelOfFortuneGame extends GameBase {
-    type: GameType.WHEEL_OF_FORTUNE;
-    rounds: WheelRound[];
-  }
+export interface WheelOfFortuneGame extends GameBase {
+  type: GameType.WHEEL_OF_FORTUNE;
+  rounds: WheelRound[];
+}
 
 // -----------------------------
 // Lottery
@@ -251,7 +262,7 @@ export interface LotteryGame extends GameBase {
 // -----------------------------
 export interface BingoCard {
   id: string;
-  grid: number[][];        // 5x5 matrix of numbers
+  grid: (number | string)[][];   // 5x5 matrix of numbers or words
   hasFreeSpace?: boolean;  // if true, center is free
 }
 
@@ -348,7 +359,7 @@ export type Screen =
   | "shows"
   | "play";
 
-  // ✅ Used for draft states in GameCreator
+// ✅ Used for draft states in GameCreator
 export interface GameLite {
   id?: string;
   name?: string;

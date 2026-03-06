@@ -1,32 +1,8 @@
-// src/screens/editors/BingoEditor.tsx
 import React, { useState } from "react";
 import { v4 as uuid } from "uuid";
-import { GameType, GameBase } from "@/types";
-import { db } from "@/services/firebase";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { BingoGame, BingoRound, BingoCard } from "@/types";
 import { generateBingoData } from "@/services/geminiService";
-
-/* ----------------------------
-   🎯 TYPE DEFINITIONS
------------------------------ */
-export interface BingoCard {
-  id: string;
-  grid: number[][]; // 5x5 numeric matrix
-  hasFreeSpace?: boolean;
-}
-
-export interface BingoRound {
-  id: string;
-  topic: string;
-  mode: "CLASSIC" | "90BALL" | "CONCEPTUAL";
-  cards: BingoCard[];
-  createdAt: string;
-}
-
-export interface BingoGame extends GameBase {
-  type: GameType.BINGO;
-  round: BingoRound | null;
-}
+import { useLanguage } from "@/context/LanguageContext";
 
 /* ----------------------------
    🎨 COMPONENT
@@ -37,6 +13,7 @@ interface Props {
 }
 
 const BingoEditor: React.FC<Props> = ({ game, setGame }) => {
+  const { lang } = useLanguage();
   const [topic, setTopic] = useState(game.description || "");
   const [mode, setMode] = useState<"CLASSIC" | "90BALL" | "CONCEPTUAL">("CLASSIC");
   const [loading, setLoading] = useState(false);
@@ -45,61 +22,61 @@ const BingoEditor: React.FC<Props> = ({ game, setGame }) => {
   /* ----------------------------
      🤖 GENERATE CARDS (AI OR MOCK)
   ----------------------------- */
- const handleGenerate = async () => {
-  setLoading(true);
-  setError(null);
+  const handleGenerate = async () => {
+    setLoading(true);
+    setError(null);
 
-  try {
-    const result = await generateBingoData(topic, mode, "en");
-    console.log("🎯 Bingo data received:", result);
+    try {
+      const response = await generateBingoData(topic, mode, lang);
 
-    const cards: BingoCard[] =
-      result.cards?.map((grid: number[][]) => ({
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      const result = response.data;
+      if (!result) throw new Error("No Bingo data generated.");
+
+      console.log("🎯 Bingo data received:", result);
+
+      const cards: BingoCard[] =
+        (result.cards || [])
+          .filter((grid: any) => Array.isArray(grid)) // Defensive check
+          .map((grid: (string | number)[][]) => ({
+            id: uuid(),
+            // ✅ wrap each row as an object instead of nested arrays
+            grid: grid.map((row) =>
+              Array.isArray(row)
+                ? row.map((n) => (isNaN(Number(n)) ? n : Number(n)))
+                : []
+            ),
+            hasFreeSpace: true,
+          }));
+
+      const newRound: BingoRound = {
         id: uuid(),
-        // ✅ wrap each row as an object instead of nested arrays
-        grid: grid.map((row) => row.map((n) => Number(n))),
-        hasFreeSpace: true,
-      })) || [];
+        topic,
+        mode,
+        cards,
+        createdAt: new Date().toISOString(),
+      };
 
-    const newRound: BingoRound = {
-      id: uuid(),
-      topic,
-      mode,
-      cards,
-      createdAt: new Date().toISOString(),
-    };
+      const updatedGame: BingoGame = {
+        ...game,
+        description: topic,
+        round: newRound,
+      };
 
-    const updatedGame: BingoGame = {
-      ...game,
-      description: topic,
-      round: newRound,
-    };
+      setGame(updatedGame);
 
-    setGame(updatedGame);
-
-    // ✅ Serialize grid for Firestore (avoid nested arrays)
-    const serializedCards = newRound.cards.map((card) => ({
-      id: card.id,
-      hasFreeSpace: card.hasFreeSpace,
-      grid: card.grid.map((row) => ({ row })), // 👈 wrap row array into object
-    }));
-
-    await addDoc(collection(db, "bingoRounds"), {
-      id: newRound.id,
-      topic: newRound.topic,
-      mode: newRound.mode,
-      cards: serializedCards,
-      createdAt: serverTimestamp(),
-    });
-
-    console.log("✅ Saved Bingo round to Firestore:", newRound);
-  } catch (err: any) {
-    console.error("❌ Bingo generation failed:", err);
-    setError("Error generating Bingo cards. Try again.");
-  } finally {
-    setLoading(false);
-  }
-};
+      // Local-only: no remote save
+      console.log("✅ Generated Bingo round (local only):", newRound);
+    } catch (err: any) {
+      console.error("❌ Bingo generation failed:", err);
+      setError("Error generating Bingo cards. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /* ----------------------------
      🧱 UI LAYOUT
@@ -168,9 +145,8 @@ const BingoEditor: React.FC<Props> = ({ game, setGame }) => {
                         {row.map((num, cIdx) => (
                           <td
                             key={cIdx}
-                            className={`w-10 h-10 border border-gray-600 ${
-                              num === 0 ? "bg-yellow-600 text-black font-bold" : "bg-gray-800"
-                            }`}
+                            className={`w-10 h-10 border border-gray-600 ${num === 0 ? "bg-yellow-600 text-black font-bold" : "bg-gray-800"
+                              }`}
                           >
                             {num === 0 ? "★" : num}
                           </td>

@@ -42,6 +42,7 @@ const ChainReactionEditor: React.FC<ChainReactionEditorProps> = ({
       addLink: "Add Link",
       deleteRound: "Delete Round",
       deleteLink: "Delete Link",
+      generationError: "AI failed to generate round. Please try a different theme or check the console.",
     },
     es: {
       generateTitle: "Generar Nueva Ronda de Cadena",
@@ -61,21 +62,40 @@ const ChainReactionEditor: React.FC<ChainReactionEditorProps> = ({
       addLink: "Agregar Enlace",
       deleteRound: "Eliminar Ronda",
       deleteLink: "Eliminar Enlace",
+      generationError: "La IA no pudo generar la ronda. Intenta con otro tema o revisa la consola.",
     },
   }[lang];
 
   const t = translations;
 
   const handleGenerate = async () => {
-    if (!theme.trim()) return setError(t.error);
+    if (!theme.trim()) {
+      setError(t.error);
+      return;
+    }
     setIsGenerating(true);
     setError("");
     try {
-      const round = await generateChainReactionRound(theme, linkCount, lang);
-      const newRound: ChainRound = { id: uuid(), ...round };
-      setGame({ ...game, rounds: [...(game.rounds || []), newRound] });
+      const response = await generateChainReactionRound(theme, linkCount, lang);
+
+      if (response.error) {
+        // Handle errors returned from the service
+        setError(response.error);
+      } else if (response.data) {
+        // On success, add the new round
+        const newRound: ChainRound = { id: uuid(), ...response.data };
+        setGame({ ...game, rounds: [...(game.rounds || []), newRound] });
+      } else {
+        // Handle unexpected cases where there's no data and no error
+        setError(t.generationError);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error occurred.");
+      // This will catch the critical security error from the service
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unknown error occurred.");
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -104,6 +124,7 @@ const ChainReactionEditor: React.FC<ChainReactionEditorProps> = ({
     const newRound: ChainRound = {
       id: uuid(),
       theme: t.newRound,
+      timePerQuestion: 20,
       chain: [
         { id: uuid(), prompt: "", answer: "", linkHint: "", points: 100 },
       ],
@@ -185,7 +206,7 @@ const ChainReactionEditor: React.FC<ChainReactionEditorProps> = ({
             )}
           </button>
         </div>
-        {error && <p className="text-red-500 mt-2">{error}</p>}
+        {error && <p className="text-red-500 mt-2 whitespace-pre-wrap">{error}</p>}
       </div>
 
       <div className="bg-[#0f172a] p-6 rounded-lg shadow-lg border border-gray-700">
@@ -211,8 +232,10 @@ const ChainReactionEditor: React.FC<ChainReactionEditorProps> = ({
                 {t.roundsTitle} {ri + 1}
               </h3>
               <button
-               aria-label={t.deleteRound}
-  title={t.deleteRound}
+                onClick={() => removeRound(round.id)}
+                className="p-2 rounded-full hover:bg-[#334155]"
+                aria-label={t.deleteRound}
+                title={t.deleteRound}
               >
                 <TrashIcon className="w-5 h-5 text-red-500" />
               </button>
@@ -249,10 +272,10 @@ const ChainReactionEditor: React.FC<ChainReactionEditorProps> = ({
                     rows={2}
                   />
                   <button
-                   onClick={() => removeRound(round.id)}
-  className="p-2 rounded-full hover:bg-[#334155]"
-  aria-label={t.deleteRound}
-  title={t.deleteRound}
+                    onClick={() => removeLink(round.id, q.id)}
+                    className="p-2 rounded-full hover:bg-[#334155]"
+                    aria-label={t.deleteLink}
+                    title={t.deleteLink}
                   >
                     <TrashIcon className="w-5 h-5 text-red-500" />
                   </button>

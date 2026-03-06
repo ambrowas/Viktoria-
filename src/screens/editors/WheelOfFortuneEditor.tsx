@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { WheelOfFortuneGame, WheelRound } from "@/types";
 import { generateWheelOfFortuneRounds } from "@/services/geminiService";
+import { useLanguage } from "@/context/LanguageContext";
 
 interface Props {
   game: WheelOfFortuneGame;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export default function WheelOfFortuneEditor({ game, setGame }: Props) {
+  const { lang } = useLanguage();
   const [isGenerating, setIsGenerating] = useState(false);
   const [categoryInput, setCategoryInput] = useState("");
   const [roundCount, setRoundCount] = useState(5);
@@ -45,24 +47,30 @@ export default function WheelOfFortuneEditor({ game, setGame }: Props) {
     if (isGenerating) return;
     setIsGenerating(true);
     try {
-      const rounds = await generateWheelOfFortuneRounds(
+      const response = await generateWheelOfFortuneRounds(
         categoryInput || "General Knowledge",
         Math.min(Math.max(roundCount, 1), 10),
-        "en"
+        lang
       );
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      const generatedRounds = response.data || [];
 
       setGame({
         ...game,
-        rounds: rounds.map((r: any) => ({
+        rounds: generatedRounds.map((r: any) => ({
           id: crypto.randomUUID(),
           category: r.category || categoryInput || "General",
           puzzle: r.puzzle || "Untitled Puzzle",
           prizeValue: r.prizeValue || Math.floor(Math.random() * 900) + 100,
         })),
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("❌ Error generating rounds:", err);
-      alert("AI generation failed. Please try again.");
+      alert(err.message || "AI generation failed. Please try again.");
     } finally {
       setIsGenerating(false);
     }
@@ -72,23 +80,46 @@ export default function WheelOfFortuneEditor({ game, setGame }: Props) {
   // AI: SINGLE ROUND GENERATION
   // ============================
   const handleGenerateSingle = async (id: string, category: string) => {
+    console.log("🎡 [WheelOfFortuneEditor] handleGenerateSingle called", { id, category });
     setIsGenerating(true);
     try {
-      const [r] = await generateWheelOfFortuneRounds(
+      const response = await generateWheelOfFortuneRounds(
         category || "General",
         1,
-        "en"
+        lang
       );
-      updateRound(id, "category", r.category || category);
-      updateRound(id, "puzzle", r.puzzle);
-      updateRound(
-        id,
-        "prizeValue",
-        r.prizeValue || Math.floor(Math.random() * 900) + 100
-      );
-    } catch (err) {
-      console.error("❌ Error generating single puzzle:", err);
-      alert("Could not generate puzzle for this round.");
+
+      console.log("🎡 [WheelOfFortuneEditor] AI Response:", response);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      const [r] = response.data || [];
+      if (!r) {
+        console.warn("🎡 [WheelOfFortuneEditor] No puzzle returned in data");
+        throw new Error("No puzzle generated.");
+      }
+
+      console.log("🎡 [WheelOfFortuneEditor] Updating round with:", r);
+
+      // ✅ Atomic update to prevent React state race conditions
+      setGame({
+        ...game,
+        rounds: game.rounds.map((round) =>
+          round.id === id
+            ? {
+              ...round,
+              category: r.category || category,
+              puzzle: r.puzzle,
+              prizeValue: r.prizeValue || Math.floor(Math.random() * 900) + 100,
+            }
+            : round
+        ),
+      });
+    } catch (err: any) {
+      console.error("❌ [WheelOfFortuneEditor] Error generating single puzzle:", err);
+      alert(err.message || "Could not generate puzzle for this round.");
     } finally {
       setIsGenerating(false);
     }
@@ -130,9 +161,8 @@ export default function WheelOfFortuneEditor({ game, setGame }: Props) {
           <button
             onClick={handleBulkGenerate}
             disabled={isGenerating}
-            className={`px-4 py-2 rounded-lg font-bold text-white ${
-              isGenerating ? "bg-gray-600" : "bg-green-600 hover:bg-green-700"
-            }`}
+            className={`px-4 py-2 rounded-lg font-bold text-white ${isGenerating ? "bg-gray-600" : "bg-green-600 hover:bg-green-700"
+              }`}
           >
             {isGenerating ? "Generating..." : "✨ Generate Rounds"}
           </button>

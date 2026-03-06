@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import type { Game, Screen, Show } from "@/types";
-import { flipSound, transitionSound, magicalSound } from "@/utils/sound";
+import { flipSound, transitionSound, magicalSound, stopAllSounds } from "@/utils/sound";
 import useLocalStorage from "@hooks/useLocalStorage";
 import Sidebar from "@components/Sidebar";
 import Dashboard from "@screens/Dashboard";
@@ -8,12 +8,10 @@ import GameLibrary from "@screens/GameLibrary";
 import GameCreator from "@screens/GameCreator";
 import ShowManager from "@screens/ShowManager";
 import GameRouter from "@screens/GameRouter";
+import ShowPlayer from "@screens/ShowPlayer";
+import QuickPlayWrapper from "@components/QuickPlayWrapper";
 import Modal from "@components/Modal";
-import {
-  saveGame as saveGameToFirebase,
-  deleteGame as deleteGameFromFirebase,
-  loadGames,
-} from "@services/firebaseService";
+import { getGames, saveGame, deleteGame } from "@services/localGameService";
 import { useLanguage } from "@/context/LanguageContext";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -22,78 +20,71 @@ const App: React.FC = () => {
   // STATE MANAGEMENT
   // ==============================================================
   const [screen, setScreen] = useState<Screen>("dashboard");
-  const [games, setGames] = useLocalStorage<Game[]>("gameshow-games", []);
+  const [games, setGames] = useState<Game[]>([]);
   const [shows, setShows] = useLocalStorage<Show[]>("gameshow-shows", []);
   const [editingGame, setEditingGame] = useState<Game | null>(null);
   const [gameIdToDelete, setGameIdToDelete] = useState<string | null>(null);
   const [activeGame, setActiveGame] = useState<Game | null>(null);
+  const [activeQuickPlay, setActiveQuickPlay] = useState<{ game: Game; numTeams: number } | null>(null);
+  const [isDark, setIsDark] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const { lang } = useLanguage();
 
-  // ==============================================================
-  // LOAD GAMES FROM FIREBASE
-  // ==============================================================
-  useEffect(() => {
-    const fetchGames = async () => {
-      try {
-        const firebaseGames = await loadGames();
-        setGames(firebaseGames);
-      } catch (error) {
-        console.error("Failed to load games:", error);
-        alert(
-          lang === "es"
-            ? "Error al cargar los juegos desde Firebase."
-            : "Error loading games from Firebase."
-        );
-      }
-    };
-    fetchGames();
-  }, [setGames, lang]);
+  const toggleTheme = () => setIsDark((prev) => !prev);
 
   // ==============================================================
-  // SAVE HANDLER
+  // DATA FETCHING & PERSISTENCE
   // ==============================================================
+
+  const fetchGames = useCallback(async () => {
+    try {
+      const localGames = await getGames();
+      setGames(localGames);
+    } catch (error) {
+      console.error("Failed to load games:", error);
+      alert(lang === "es" ? "Error al cargar los juegos locales." : "Error loading local games.");
+    }
+  }, [lang]);
+
+  useEffect(() => {
+    fetchGames();
+  }, [fetchGames]);
+
   const handleSaveGame = useCallback(
     async (gameToSave: Game): Promise<void> => {
       try {
-        await saveGameToFirebase(gameToSave);
-        setGames((prevGames) =>
-          prevGames.some((g) => g.id === gameToSave.id)
-            ? prevGames.map((g) => (g.id === gameToSave.id ? gameToSave : g))
-            : [...prevGames, gameToSave]
-        );
-        setEditingGame(null);
-        setScreen("library");
+        const success = await saveGame(gameToSave);
+        if (success) {
+          await fetchGames(); // Refresh the list from the source of truth
+          setEditingGame(null);
+          setScreen("library");
+        } else {
+          throw new Error("Save operation returned false.");
+        }
       } catch (error) {
         console.error("Save failed:", error);
-        alert(
-          lang === "es"
-            ? "No se pudo guardar el juego. Inténtalo de nuevo."
-            : "Could not save the game. Try again."
-        );
+        alert(lang === "es" ? "No se pudo guardar el juego localmente." : "Could not save the game locally.");
       }
     },
-    [setGames, lang]
+    [fetchGames, lang]
   );
 
-  // ==============================================================
-  // DELETE HANDLER
-  // ==============================================================
   const handleDeleteConfirm = useCallback(async (): Promise<void> => {
-    if (!gameIdToDelete) return;
+    const gameToDelete = games.find(g => g.id === gameIdToDelete);
+    if (!gameToDelete) return;
     try {
-      await deleteGameFromFirebase(gameIdToDelete);
-      setGames((prev) => prev.filter((g) => g.id !== gameIdToDelete));
-      setGameIdToDelete(null);
+      const success = await deleteGame(gameToDelete);
+      if (success) {
+        await fetchGames(); // Refresh the list from the source of truth
+        setGameIdToDelete(null);
+      } else {
+        throw new Error("Delete operation returned false.");
+      }
     } catch (err) {
       console.error("Delete failed:", err);
-      alert(
-        lang === "es"
-          ? "No se pudo eliminar el juego. Inténtalo de nuevo."
-          : "Could not delete the game. Try again."
-      );
+      alert(lang === "es" ? "No se pudo eliminar el juego local." : "Could not delete the local game.");
     }
-  }, [gameIdToDelete, setGames, lang]);
+  }, [gameIdToDelete, games, fetchGames, lang]);
 
   // ==============================================================
   // EDIT HANDLER
@@ -146,6 +137,7 @@ const App: React.FC = () => {
   };
 
   const handleExitGame = () => {
+    stopAllSounds();
     flipSound.play();
     setIsTransitioning(true);
 
@@ -156,10 +148,43 @@ const App: React.FC = () => {
     }, 1200);
   };
 
+  const handleQuickPlay = (g: Game, numTeams: number) => {
+    setIsTransitioning(true);
+    transitionSound.play();
+    magicalSound.play();
+
+    setTimeout(() => {
+      setActiveQuickPlay({ game: g, numTeams });
+      setIsTransitioning(false);
+    }, 1500);
+  };
+
+  const handleExitQuickPlay = () => {
+    stopAllSounds();
+    flipSound.play();
+    setIsTransitioning(true);
+
+    setTimeout(() => {
+      setActiveQuickPlay(null);
+      setScreen("library");
+      setIsTransitioning(false);
+    }, 1200);
+  };
+
   // ==============================================================
   // RENDER SCREEN
   // ==============================================================
   const renderScreen = (): JSX.Element | null => {
+    if (activeQuickPlay) {
+      return (
+        <QuickPlayWrapper
+          game={activeQuickPlay.game}
+          numTeams={activeQuickPlay.numTeams}
+          onExit={handleExitQuickPlay}
+        />
+      );
+    }
+
     if (activeGame) {
       return <GameRouter game={activeGame} onExit={handleExitGame} />;
     }
@@ -170,6 +195,8 @@ const App: React.FC = () => {
           <Dashboard
             games={games}
             shows={shows}
+            isDark={isDark}
+            toggleTheme={toggleTheme}
             setScreen={setScreen}
             startNewGame={() => setScreen("creator")}
           />
@@ -180,6 +207,7 @@ const App: React.FC = () => {
           <GameLibrary
             games={games}
             onPlay={handlePlayGame}
+            onQuickPlay={handleQuickPlay}
             onEdit={handleEditGame}
             onDelete={setGameIdToDelete}
             onCreateNew={() => setScreen("creator")}
@@ -191,7 +219,7 @@ const App: React.FC = () => {
           <GameCreator
             onSave={handleSaveGame}
             existingGame={editingGame}
-            onCreateSample={async () => {}}
+            onCreateSample={async () => { }}
           />
         );
 
@@ -204,12 +232,23 @@ const App: React.FC = () => {
             onDeleteShow={handleDeleteShow}
           />
         );
+      case "play":
+        return (
+          <ShowPlayer
+            shows={shows}
+            games={games}
+            onPlayGame={handlePlayGame}
+            setScreen={setScreen}
+          />
+        );
 
       default:
         return (
           <Dashboard
             games={games}
             shows={shows}
+            isDark={isDark}
+            toggleTheme={toggleTheme}
             setScreen={setScreen}
             startNewGame={() => setScreen("creator")}
           />
@@ -222,12 +261,11 @@ const App: React.FC = () => {
   // ==============================================================
   return (
     <div
-      className={`dark flex h-screen bg-gradient-to-b from-[#0a0a0a] to-[#111827] text-text-primary transition-all duration-700 ${
-        activeGame ? "overflow-hidden" : ""
-      }`}
+      className={`${isDark ? "dark" : ""} flex h-screen bg-gradient-to-b from-[#0a0a0a] to-[#111827] text-text-primary transition-all duration-700 ${activeGame || activeQuickPlay ? "overflow-hidden" : ""
+        }`}
     >
       {/* 🟦 Sidebar — Hidden During Active Game */}
-      {!activeGame && !isTransitioning && (
+      {!activeGame && !activeQuickPlay && !isTransitioning && (
         <aside className="transition-opacity duration-700 ease-in-out">
           <Sidebar currentScreen={screen} setScreen={setScreen} />
         </aside>
@@ -235,9 +273,8 @@ const App: React.FC = () => {
 
       {/* 🎮 Main Area */}
       <main
-        className={`flex-1 transition-all duration-700 ${
-          activeGame ? "p-0" : "overflow-y-auto p-4 sm:p-6 md:p-8"
-        }`}
+        className={`flex-1 transition-all duration-700 ${activeGame || activeQuickPlay ? "p-0" : "overflow-y-auto p-4 sm:p-6 md:p-8"
+          }`}
       >
         <AnimatePresence>
           {isTransitioning && (

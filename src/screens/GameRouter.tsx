@@ -24,7 +24,7 @@ import LotteryGame from "./games/LotteryGame";
 import BingoGame from "./games/BingoGame"; // ✅ NEW
 
 // --- Sounds ---
-import { transitionSound, magicalSound } from "@/utils/sound";
+import { transitionSound, magicalSound, stopAllSounds } from "@/utils/sound";
 
 // --- Game Map ---
 const gameComponents: Record<GameType, React.FC<any>> = {
@@ -57,7 +57,10 @@ const GameRouter: React.FC<GameRouterProps> = ({ game, onExit }) => {
 
     // ⏳ Show transition for ~2 seconds
     const timer = setTimeout(() => setIsTransitioning(false), 2000);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      stopAllSounds();
+    };
   }, []);
 
   const Component = gameComponents[game.type as GameType];

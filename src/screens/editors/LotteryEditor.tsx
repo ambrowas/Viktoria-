@@ -1,32 +1,8 @@
 import React, { useState } from "react";
 import { v4 as uuid } from "uuid";
-import { GameType, GameBase } from "@/types";
+import { LotteryGame, LotteryTicket, LotteryDraw } from "@/types";
 import { generateLotteryData } from "@/services/geminiService";
-import { db } from "@/services/firebase";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-
-/* ----------------------------
-   🎟️ TYPE DEFINITIONS
------------------------------ */
-export interface LotteryDraw {
-  id: string;
-  drawNumbers: number[]; // ✅ strictly numeric
-  date: string;
-}
-
-export interface LotteryTicket {
-  id: string;
-  numbers: number[]; // ✅ strictly numeric
-  owner?: string;
-  isWinner?: boolean;
-}
-
-export interface LotteryGame extends GameBase {
-  type: GameType.LOTTERY;
-  mode: "TRADITIONAL" | "CONCEPTUAL";
-  draw: LotteryDraw | null;
-  tickets: LotteryTicket[];
-}
+import { useLanguage } from "@/context/LanguageContext";
 
 /* ----------------------------
    🎨 COMPONENT
@@ -37,6 +13,7 @@ interface Props {
 }
 
 export default function LotteryEditor({ game, setGame }: Props) {
+  const { lang } = useLanguage();
   const [topic, setTopic] = useState(game.description || "");
   const [mode, setMode] = useState<"TRADITIONAL" | "CONCEPTUAL">(
     game.mode || "TRADITIONAL"
@@ -48,76 +25,71 @@ export default function LotteryEditor({ game, setGame }: Props) {
      🤖 HANDLE AI GENERATION
   ----------------------------- */
   const handleGenerate = async () => {
-  setLoading(true);
-  setError(null);
+    setLoading(true);
+    setError(null);
 
-  try {
-    // ✅ Accept that Gemini may return strings or numbers
-    const result: {
-      draws: (string | number)[];
-      tickets: (string | number)[][];
-    } = await generateLotteryData(topic, mode, "en");
+    try {
+      // ✅ Use application language
+      const response = await generateLotteryData(topic, mode, lang);
 
-    console.log("🎟️ Lottery data received:", result);
+      if (response.error) {
+        throw new Error(response.error);
+      }
 
-    // ✅ Normalize draws to numbers
-    const drawNumbers = (result.draws || [])
-      .map((n) => Number(n))
-      .filter((n) => !isNaN(n));
+      const result = response.data;
+      if (!result) throw new Error("No lottery data generated.");
 
-    const draw: LotteryDraw = {
-      id: uuid(),
-      drawNumbers,
-      date: new Date().toISOString(),
-    };
+      console.log("🎟️ Lottery data received:", result);
 
-    // ✅ Prepare winning set
-    const winningSet = new Set(drawNumbers);
+      // ✅ Normalize draws to numbers
+      const drawNumbers = (result.draws || [])
+        .map((n: string | number) => Number(n))
+        .filter((n: number) => !isNaN(n));
 
-    // ✅ Normalize tickets
-    const tickets: LotteryTicket[] =
-      (result.tickets || []).map((ticket) => {
-        const numbers = ticket
-          .map((n) => Number(n))
-          .filter((n) => !isNaN(n));
-        const matches = numbers.filter((n) => winningSet.has(n)).length;
-        return {
-          id: uuid(),
-          numbers,
-          isWinner: matches >= 3,
-        };
-      }) || [];
-
-    // ✅ Update local state
-    const updatedGame: LotteryGame = {
-      ...game,
-      description: topic,
-      mode,
-      draw,
-      tickets,
-    };
-
-    setGame(updatedGame);
-
-    // ✅ Publish to Firestore only if valid
-    if (drawNumbers.length > 0) {
-      await addDoc(collection(db, "lotteryRounds"), {
-        id: draw.id,
-        date: draw.date,
+      const draw: LotteryDraw = {
+        id: uuid(),
         drawNumbers,
-        createdAt: serverTimestamp(),
-      });
-      console.log("✅ Published draw to Firestore:", drawNumbers);
-    } else {
-      console.warn("⚠️ No valid drawNumbers found, skipping Firestore sync.");
+        date: new Date().toISOString(),
+      };
+
+      // ✅ Prepare winning set
+      const winningSet = new Set(drawNumbers);
+
+      // ✅ Normalize tickets with strict defensive checks
+      const tickets: LotteryTicket[] =
+        (result.tickets || [])
+          .filter((t: any) => Array.isArray(t)) // Skip non-array tickets
+          .map((ticket: (string | number)[]) => {
+            const numbers = ticket
+              .map((n: string | number) => Number(n))
+              .filter((n: number) => !isNaN(n));
+            const matches = numbers.filter((n: number) => winningSet.has(n)).length;
+            return {
+              id: uuid(),
+              numbers,
+              isWinner: matches >= 3,
+            };
+          }) || [];
+
+      // ✅ Update local state
+      const updatedGame: LotteryGame = {
+        ...game,
+        description: topic,
+        mode,
+        draw,
+        tickets,
+      };
+
+      setGame(updatedGame);
+
+      console.log("✅ Lottery draw generated (local only):", drawNumbers);
+    } catch (err: any) {
+      console.error("❌ Lottery generation failed:", err);
+      setError("Error generating lottery data. Try again.");
+    } finally {
+      setLoading(false);
     }
-  } catch (err: any) {
-    console.error("❌ Lottery generation failed:", err);
-    setError("Error generating lottery data. Try again.");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
 
   /* ----------------------------
@@ -198,11 +170,10 @@ export default function LotteryEditor({ game, setGame }: Props) {
             {game.tickets.map((ticket) => (
               <div
                 key={ticket.id}
-                className={`p-3 border rounded ${
-                  ticket.isWinner
-                    ? "border-yellow-400 bg-yellow-900/20"
-                    : "border-gray-600"
-                }`}
+                className={`p-3 border rounded ${ticket.isWinner
+                  ? "border-yellow-400 bg-yellow-900/20"
+                  : "border-gray-600"
+                  }`}
               >
                 <div className="flex flex-wrap gap-2">
                   {ticket.numbers.map((n, i) => (

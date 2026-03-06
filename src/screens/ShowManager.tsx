@@ -294,6 +294,72 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
     }
   };
 
+  const renderLibraryGame = (gameId: string, index: number) => {
+    const game = gamesMap.get(gameId);
+    if (!game) return null;
+
+    return (
+      <Draggable draggableId={gameId} index={index}>
+        {(provided, snapshot) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.draggableProps}
+            {...provided.dragHandleProps}
+            className={`rounded-lg border p-3 bg-base-100 flex flex-col gap-1 cursor-move transition ${
+              snapshot.isDragging
+                ? "border-brand-primary bg-brand-primary/10 shadow-lg"
+                : "border-base-300 hover:border-brand-primary/70"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-sm">{game.name}</span>
+              <span className="text-[10px] uppercase tracking-wide text-text-secondary">
+                {game.type.replace(/_/g, " ")}
+              </span>
+            </div>
+            {game.description && (
+              <p className="text-xs text-text-secondary">{game.description}</p>
+            )}
+          </div>
+        )}
+      </Draggable>
+    );
+  };
+
+  const renderRoundGame = (gameId: string, index: number) => {
+    const game = gamesMap.get(gameId);
+    if (!game) return null;
+
+    return (
+      <Draggable draggableId={gameId} index={index}>
+        {(provided, snapshot) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.draggableProps}
+            {...provided.dragHandleProps}
+            className={`rounded-lg border p-3 bg-base-100 flex items-start justify-between gap-2 cursor-move transition ${
+              snapshot.isDragging
+                ? "border-brand-primary bg-brand-primary/10 shadow-lg"
+                : "border-base-300 hover:border-brand-primary/70"
+            }`}
+          >
+            <div className="flex-1">
+              <p className="text-sm font-semibold">
+                {index + 1}. {game.name}
+              </p>
+              {game.description && (
+                <p className="text-xs text-text-secondary mt-1">{game.description}</p>
+              )}
+            </div>
+            <span className="text-[10px] uppercase tracking-wide text-text-secondary whitespace-nowrap">
+              {game.type.replace(/_/g, " ")}
+            </span>
+          </div>
+        )}
+      </Draggable>
+    );
+  };
+
   const handleSaveShowInternal = async () => {
     setIsSaving(true);
     setStatusMessage(null);

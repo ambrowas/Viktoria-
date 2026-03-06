@@ -7,6 +7,7 @@ import {
   LibraryIcon,
   PlusIcon,
   TvIcon,
+  PlayIcon,
 } from "@components/icons/IconDefs";
 import Lottie from "lottie-react";
 import { motion } from "framer-motion";
@@ -25,11 +26,10 @@ const NavItem: React.FC<{
 }> = ({ icon, label, isActive, onClick }) => (
   <button
     onClick={onClick}
-    className={`flex items-center w-full px-4 py-3 transition-colors duration-200 rounded-lg ${
-      isActive
+    className={`flex items-center w-full px-4 py-3 transition-colors duration-200 rounded-lg ${isActive
         ? "bg-brand-primary text-black shadow-lg"
         : "text-text-secondary hover:bg-base-300 hover:text-white"
-    }`}
+      }`}
   >
     {icon}
     <span className="ml-4 font-medium">{label}</span>
@@ -46,6 +46,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, setScreen }) => {
     library: lang === "es" ? "Colección" : "Game Library",
     creator: lang === "es" ? "Creador de Juegos" : "Game Creator",
     shows: lang === "es" ? "Gestor de Shows" : "Show Manager",
+    play: lang === "es" ? "Jugar" : "Play Show",
   };
 
   // Handle 3D tilt effect
@@ -59,7 +60,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, setScreen }) => {
   const resetTilt = () => setTilt({ x: 0, y: 0 });
 
   return (
-    <aside className="w-64 bg-base-200 text-text-primary flex flex-col p-4 border-r border-base-300">
+    <aside className="w-64 h-full bg-base-200 text-text-primary flex flex-col p-4 border-r border-base-300">
       {/* Header */}
       <div className="flex items-center mb-8 px-2">
         <CrownIcon className="w-8 h-8 text-brand-accent" />
@@ -67,7 +68,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, setScreen }) => {
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-col space-y-2">
+      <nav className="flex flex-col space-y-2 relative z-10">
         <NavItem
           icon={<HomeIcon className="w-6 h-6" />}
           label={labels.dashboard}
@@ -92,60 +93,66 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, setScreen }) => {
           isActive={currentScreen === "shows"}
           onClick={() => setScreen("shows")}
         />
+        <NavItem
+          icon={<PlayIcon className="w-6 h-6" />}
+          label={labels.play}
+          isActive={currentScreen === "play"}
+          onClick={() => setScreen("play")}
+        />
       </nav>
 
       <div className="flex-grow" />
 
- {/* Floating Puzzle Animation with Tilt + Glow (Larger Version) */}
-<div
-  className="flex justify-center mt-6 mb-6 relative cursor-pointer"
-  onMouseMove={handleMouseMove}
-  onMouseLeave={() => {
-    resetTilt();
-    setIsHovered(false);
-  }}
-  onMouseEnter={() => setIsHovered(true)}
->
-  <motion.div
-    style={{
-      rotateX: tilt.y,
-      rotateY: -tilt.x,
-    }}
-    initial={{ opacity: 0, y: 10 }}
-    animate={{
-      opacity: 1,
-      y: [0, -10, 0], // slightly larger float distance for bigger size
-    }}
-    transition={{
-      duration: 2.6,
-      repeat: Infinity,
-      repeatType: "mirror",
-      ease: "easeInOut",
-    }}
-    className="w-[240px] opacity-90 [transform-style:preserve-3d]"
-  >
-    <motion.div
-      className="absolute inset-0 rounded-full blur-2xl"
-      animate={{
-        backgroundColor: isHovered
-          ? "rgba(255,255,255,0.25)"
-          : "rgba(0,0,0,0.25)",
-        scale: isHovered ? 1.3 : 1,
-      }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-    />
-    <Lottie
-      animationData={puzzleAnimation}
-      loop
-      autoplay
-      style={{
-        filter: isHovered
-          ? "drop-shadow(0 0 14px rgba(255,255,255,0.5))"
-          : "drop-shadow(0 0 10px rgba(0,0,0,0.25))",
-      }}
-    />
-  </motion.div>
-</div>
+      {/* Floating Puzzle Animation with Tilt + Glow (Larger Version) */}
+      <div
+        className="flex justify-center mt-6 mb-6 relative cursor-pointer"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => {
+          resetTilt();
+          setIsHovered(false);
+        }}
+        onMouseEnter={() => setIsHovered(true)}
+      >
+        <motion.div
+          style={{
+            rotateX: tilt.y,
+            rotateY: -tilt.x,
+          }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{
+            opacity: 1,
+            y: [0, -10, 0], // slightly larger float distance for bigger size
+          }}
+          transition={{
+            duration: 2.6,
+            repeat: Infinity,
+            repeatType: "mirror",
+            ease: "easeInOut",
+          }}
+          className="w-[240px] opacity-90 [transform-style:preserve-3d]"
+        >
+          <motion.div
+            className="absolute inset-0 rounded-full blur-2xl"
+            animate={{
+              backgroundColor: isHovered
+                ? "rgba(255,255,255,0.25)"
+                : "rgba(0,0,0,0.25)",
+              scale: isHovered ? 1.3 : 1,
+            }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          />
+          <Lottie
+            animationData={puzzleAnimation}
+            loop
+            autoplay
+            style={{
+              filter: isHovered
+                ? "drop-shadow(0 0 14px rgba(255,255,255,0.5))"
+                : "drop-shadow(0 0 10px rgba(0,0,0,0.25))",
+            }}
+          />
+        </motion.div>
+      </div>
       {/* Footer */}
       <div className="text-center text-xs text-slate-500">
         {lang === "es"
