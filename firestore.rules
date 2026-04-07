@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Session synchronization rules
+    match /sessions/{sessionId} {
+      allow read, write: if true;
+      
+      // Allow recursive access to sub-collections (participants, actions, etc.)
+      match /{document=**} {
+        allow read, write: if true;
+      }
+    }
+  }
+}

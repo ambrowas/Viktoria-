@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import type { Game, Player, Show, ShowRound, Team } from "@/types";
 import { GameType } from "@/types";
+import { X, GripVertical } from "lucide-react";
+import TeamIcon from "@/components/TeamIcon";
 
 interface ShowManagerProps {
   shows: Show[];
@@ -14,7 +16,7 @@ type WizardStep = 0 | 1 | 2 | 3;
 
 const STEP_LABELS = ["Basics", "Teams", "Rounds", "Review"] as const;
 const TEAM_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#f97316", "#14b8a6"];
-const TEAM_EMOJIS = ["🔥", "⚡️", "🌟", "🧠", "🚀", "🎯", "🎵", "🎮", "🦊", "🐼"];
+const TEAM_ICONS = ["flame", "zap", "star", "brain", "rocket", "target", "music", "gamepad", "trophy", "crown"];
 const GAME_TYPE_FILTERS: Array<"ALL" | GameType> = ["ALL", ...Object.values(GameType)] as Array<
   "ALL" | GameType
 >;
@@ -24,6 +26,10 @@ const DEFAULT_SETTINGS = {
   playersPerTeam: 3,
   totalRounds: 3,
   notes: "",
+  introMusic: "viktoria" as const,
+  language: "es" as const,
+  hostControl: "ipad" as const,
+  playerControl: "ipad" as const,
 };
 
 const uuid = () => crypto.randomUUID();
@@ -39,7 +45,7 @@ const createTeam = (index: number, playersPerTeam: number): Team => ({
   name: `Team ${index + 1}`,
   score: 0,
   color: TEAM_COLORS[index % TEAM_COLORS.length],
-  emoji: TEAM_EMOJIS[index % TEAM_EMOJIS.length],
+  emoji: TEAM_ICONS[index % TEAM_ICONS.length],
   players: createPlayers(playersPerTeam),
 });
 
@@ -213,8 +219,22 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
   };
 
   const handleDragEnd = (result: DropResult) => {
-    const { destination, source } = result;
+    const { destination, source, type } = result;
     if (!destination) return;
+
+    if (type === 'ROUND') {
+      setShowDraft((prev) => {
+        const rounds = [...prev.rounds];
+        const [removed] = rounds.splice(source.index, 1);
+        rounds.splice(destination.index, 0, removed);
+        // Recalculate order indices
+        return {
+          ...prev,
+          rounds: rounds.map((r, i) => ({ ...r, order: i }))
+        };
+      });
+      return;
+    }
 
     const sourceBucket = source.droppableId;
     const destBucket = destination.droppableId;
@@ -294,6 +314,20 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
     }
   };
 
+  const removeGameFromRound = (roundIndex: number, gameIndex: number) => {
+    setShowDraft((prev) => {
+      const rounds = [...prev.rounds];
+      const gamesInRound = [...rounds[roundIndex].gameIds];
+      const [removedId] = gamesInRound.splice(gameIndex, 1);
+      rounds[roundIndex] = { ...rounds[roundIndex], gameIds: gamesInRound };
+
+      if (removedId) {
+        setUnassignedGameIds((prevPool) => [removedId, ...prevPool]);
+      }
+      return { ...prev, rounds };
+    });
+  };
+
   const renderLibraryGame = (gameId: string, index: number) => {
     const game = gamesMap.get(gameId);
     if (!game) return null;
@@ -305,11 +339,10 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
             ref={provided.innerRef}
             {...provided.draggableProps}
             {...provided.dragHandleProps}
-            className={`rounded-lg border p-3 bg-base-100 flex flex-col gap-1 cursor-move transition ${
-              snapshot.isDragging
-                ? "border-brand-primary bg-brand-primary/10 shadow-lg"
-                : "border-base-300 hover:border-brand-primary/70"
-            }`}
+            className={`rounded-lg border p-3 bg-base-100 flex flex-col gap-1 cursor-move transition ${snapshot.isDragging
+              ? "border-brand-primary bg-brand-primary/10 shadow-lg"
+              : "border-base-300 hover:border-brand-primary/70"
+              }`}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold text-sm">{game.name}</span>
@@ -326,7 +359,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
     );
   };
 
-  const renderRoundGame = (gameId: string, index: number) => {
+  const renderRoundGame = (gameId: string, index: number, roundIndex: number) => {
     const game = gamesMap.get(gameId);
     if (!game) return null;
 
@@ -337,23 +370,34 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
             ref={provided.innerRef}
             {...provided.draggableProps}
             {...provided.dragHandleProps}
-            className={`rounded-lg border p-3 bg-base-100 flex items-start justify-between gap-2 cursor-move transition ${
-              snapshot.isDragging
-                ? "border-brand-primary bg-brand-primary/10 shadow-lg"
-                : "border-base-300 hover:border-brand-primary/70"
-            }`}
+            className={`rounded-lg border p-3 bg-base-100 flex items-start justify-between gap-2 cursor-move transition ${snapshot.isDragging
+              ? "border-brand-primary bg-brand-primary/10 shadow-lg"
+              : "border-base-300 hover:border-brand-primary/70"
+              }`}
           >
             <div className="flex-1">
               <p className="text-sm font-semibold">
-                {index + 1}. {game.name}
+                {game.name}
               </p>
               {game.description && (
                 <p className="text-xs text-text-secondary mt-1">{game.description}</p>
               )}
             </div>
-            <span className="text-[10px] uppercase tracking-wide text-text-secondary whitespace-nowrap">
-              {game.type.replace(/_/g, " ")}
-            </span>
+            <div className="flex flex-col items-end gap-2 text-right">
+              <span className="text-[10px] uppercase tracking-wide text-text-secondary whitespace-nowrap bg-base-200 px-1.5 py-0.5 rounded">
+                {game.type.replace(/_/g, " ")}
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeGameFromRound(roundIndex, index);
+                }}
+                className="p-1.5 rounded-lg hover:bg-red-500/10 text-text-secondary hover:text-red-500 transition-colors"
+                title="Remove game from round"
+              >
+                <X size={14} />
+              </button>
+            </div>
           </div>
         )}
       </Draggable>
@@ -454,17 +498,40 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
           />
         </div>
         <div>
-          <label className="block font-semibold mb-1">Number of Rounds</label>
-          <input
-            type="number"
-            min={1}
-            max={10}
-            value={showDraft.settings.totalRounds}
-            onChange={(e) =>
-              updateSettings({ totalRounds: Math.max(1, Math.min(10, Number(e.target.value))) })
-            }
+          <label className="block font-semibold mb-1">Language</label>
+          <select
+            value={showDraft.settings.language || "es"}
+            onChange={(e) => updateSettings({ language: e.target.value as any })}
             className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
-          />
+          >
+            <option value="es">Español 🇬🇶</option>
+            <option value="en">English 🇺🇸</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <label className="block font-semibold mb-1">Host Mode</label>
+          <select
+            value={showDraft.settings.hostControl || "ipad"}
+            onChange={(e) => updateSettings({ hostControl: e.target.value as any })}
+            className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
+          >
+            <option value="ipad">iPad Mode</option>
+            <option value="manual">Manual Mode (PC)</option>
+          </select>
+        </div>
+        <div>
+          <label className="block font-semibold mb-1">Player Mode</label>
+          <select
+            value={showDraft.settings.playerControl || "ipad"}
+            onChange={(e) => updateSettings({ playerControl: e.target.value as any })}
+            className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
+          >
+            <option value="ipad">iPad Mode (Remote)</option>
+            <option value="manual">Manual Mode (PC)</option>
+          </select>
         </div>
       </div>
       <div>
@@ -506,19 +573,18 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
               />
               <p className="text-xs text-text-secondary mt-2 uppercase tracking-wide">Quick Picks</p>
               <div className="flex flex-wrap gap-2 mt-1">
-                {TEAM_EMOJIS.map((emoji) => (
+                {TEAM_ICONS.map((icon) => (
                   <button
-                    key={`${team.id}-emoji-${emoji}`}
+                    key={`${team.id}-icon-${icon}`}
                     type="button"
-                    aria-label={`Select emoji ${emoji}`}
-                    className={`h-9 w-9 rounded-full border bg-base-100 text-lg flex items-center justify-center transition ${
-                      team.emoji === emoji
-                        ? "border-brand-primary text-brand-primary shadow-md"
-                        : "border-base-300 hover:border-brand-primary/60"
-                    }`}
-                    onClick={() => updateTeam(teamIndex, { emoji })}
+                    aria-label={`Select icon ${icon}`}
+                    className={`h-9 w-9 rounded-xl border bg-base-100 flex items-center justify-center transition ${team.emoji === icon
+                      ? "border-brand-primary text-brand-primary shadow-md bg-brand-primary/10"
+                      : "border-base-300 hover:border-brand-primary/60"
+                      }`}
+                    onClick={() => updateTeam(teamIndex, { emoji: icon })}
                   >
-                    {emoji}
+                    <TeamIcon iconName={icon} className="w-5 h-5" />
                   </button>
                 ))}
                 <button
@@ -610,9 +676,8 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
             <div
               ref={provided.innerRef}
               {...provided.droppableProps}
-              className={`space-y-2 min-h-[220px] rounded-lg p-3 transition ${
-                snapshot.isDraggingOver ? "bg-base-100/80" : "bg-base-100"
-              }`}
+              className={`space-y-2 min-h-[220px] rounded-lg p-3 transition ${snapshot.isDraggingOver ? "bg-base-100/80" : "bg-base-100"
+                }`}
             >
               {filteredUnassignedGameIds.length === 0 ? (
                 <div className="text-sm text-text-secondary text-center py-6">{emptyMessage}</div>
@@ -630,50 +695,75 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
   const renderRoundsStep = () => (
     <div className="grid lg:grid-cols-[320px,1fr] gap-5">
       {renderRoundsLibrary()}
-      <div className="space-y-4">
-        {showDraft.rounds.map((round, roundIndex) => (
-          <div key={round.id} className="bg-base-200 rounded-xl p-4 border border-base-300 space-y-3">
-            <div className="flex flex-wrap gap-4">
-              <div className="flex-1 min-w-[200px]">
-                <label className="block font-semibold mb-1">Round Name</label>
-                <input
-                  type="text"
-                  value={round.name}
-                  onChange={(e) => updateRound(roundIndex, { name: e.target.value })}
-                  className="w-full rounded-lg p-3 bg-base-100 border border-base-300"
-                />
-              </div>
-              <div className="flex-1 min-w-[200px]">
-                <label className="block font-semibold mb-1">Theme / Notes</label>
-                <input
-                  type="text"
-                  value={round.theme || ""}
-                  onChange={(e) => updateRound(roundIndex, { theme: e.target.value })}
-                  className="w-full rounded-lg p-3 bg-base-100 border border-base-300"
-                />
-              </div>
-            </div>
+      <Droppable droppableId="rounds-list" type="ROUND">
+        {(provided) => (
+          <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-4">
+            {showDraft.rounds.map((round, roundIndex) => (
+              <Draggable key={round.id} draggableId={round.id} index={roundIndex}>
+                {(provided, snapshot) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.draggableProps}
+                    className={`bg-base-200 rounded-xl p-4 border border-base-300 space-y-3 relative ${snapshot.isDragging ? "shadow-2xl ring-2 ring-brand-primary z-50 bg-base-300" : ""
+                      }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      {/* Drag Handle */}
+                      <div
+                        {...provided.dragHandleProps}
+                        className="mt-1 p-1 hover:bg-base-100 rounded cursor-grab active:cursor-grabbing text-text-secondary"
+                      >
+                        <GripVertical size={20} />
+                      </div>
 
-            <Droppable droppableId={`round-${roundIndex}`}>
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  className={`min-h-[120px] rounded-lg border-2 border-dashed ${
-                    snapshot.isDraggingOver ? "border-brand-primary bg-brand-primary/5" : "border-base-300"
-                  } p-3 space-y-2`}
-                >
-                  {round.gameIds.length === 0 && (
-                    <div className="text-sm text-text-secondary text-center py-6">Drop games here.</div>
-                  )}
-                  {round.gameIds.map((gameId, index) => renderRoundGame(gameId, index))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
+                      <div className="flex-1 space-y-3">
+                        <div className="flex flex-wrap gap-4">
+                          <div className="flex-1 min-w-[200px]">
+                            <label className="block text-xs uppercase font-extrabold text-text-secondary mb-1">Round Name</label>
+                            <input
+                              type="text"
+                              value={round.name}
+                              onChange={(e) => updateRound(roundIndex, { name: e.target.value })}
+                              className="w-full rounded-lg p-2.5 bg-base-100 border border-base-300 font-bold"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-[200px]">
+                            <label className="block text-xs uppercase font-extrabold text-text-secondary mb-1">Theme / Notes</label>
+                            <input
+                              type="text"
+                              value={round.theme || ""}
+                              onChange={(e) => updateRound(roundIndex, { theme: e.target.value })}
+                              className="w-full rounded-lg p-2.5 bg-base-100 border border-base-300"
+                            />
+                          </div>
+                        </div>
+
+                        <Droppable droppableId={`round-${roundIndex}`}>
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.droppableProps}
+                              className={`min-h-[100px] rounded-lg border-2 border-dashed ${snapshot.isDraggingOver ? "border-brand-primary bg-brand-primary/5" : "border-base-300"
+                                } p-3 space-y-2 transition-colors`}
+                            >
+                              {round.gameIds.length === 0 && (
+                                <div className="text-sm text-text-secondary text-center py-6">Drop games here.</div>
+                              )}
+                              {round.gameIds.map((gameId, index) => renderRoundGame(gameId, index, roundIndex))}
+                              {provided.placeholder}
+                            </div>
+                          )}
+                        </Droppable>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Draggable>
+            ))}
+            {provided.placeholder}
           </div>
-        ))}
-      </div>
+        )}
+      </Droppable>
     </div>
   );
 
@@ -773,9 +863,8 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
         {shows.map((show) => (
           <div
             key={show.id}
-            className={`p-3 rounded-lg border flex items-start justify-between gap-2 ${
-              selectedShowId === show.id ? "border-brand-primary bg-brand-primary/10" : "border-base-300"
-            }`}
+            className={`p-3 rounded-lg border flex items-start justify-between gap-2 ${selectedShowId === show.id ? "border-brand-primary bg-brand-primary/10" : "border-base-300"
+              }`}
           >
             <button onClick={() => setSelectedShowId(show.id)} className="text-left flex-1">
               <p className="font-semibold">{show.name || "Untitled show"}</p>
@@ -823,11 +912,10 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
               <button
                 key={label}
                 onClick={() => goToStep(index as WizardStep)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full border ${
-                  step === index
-                    ? "bg-brand-primary text-white border-brand-primary"
-                    : "bg-base-100 border-base-300 text-text-secondary"
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full border ${step === index
+                  ? "bg-brand-primary text-white border-brand-primary"
+                  : "bg-base-100 border-base-300 text-text-secondary"
+                  }`}
               >
                 <span className="font-semibold">{index + 1}</span>
                 <span>{label}</span>
@@ -841,9 +929,8 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
             <button
               onClick={goBack}
               disabled={step === 0}
-              className={`px-4 py-2 rounded-lg border ${
-                step === 0 ? "opacity-50 cursor-not-allowed" : "border-base-300"
-              }`}
+              className={`px-4 py-2 rounded-lg border ${step === 0 ? "opacity-50 cursor-not-allowed" : "border-base-300"
+                }`}
             >
               Back
             </button>
@@ -851,11 +938,10 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
               <button
                 onClick={goNext}
                 disabled={!currentStepValid}
-                className={`px-6 py-2 rounded-lg font-semibold ${
-                  currentStepValid
-                    ? "bg-brand-primary text-white"
-                    : "bg-base-300 text-text-secondary cursor-not-allowed"
-                }`}
+                className={`px-6 py-2 rounded-lg font-semibold ${currentStepValid
+                  ? "bg-brand-primary text-white"
+                  : "bg-base-300 text-text-secondary cursor-not-allowed"
+                  }`}
               >
                 Next
               </button>
@@ -863,11 +949,10 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
               <button
                 onClick={handleSaveShowInternal}
                 disabled={isSaving || !currentStepValid}
-                className={`px-6 py-2 rounded-lg font-semibold ${
-                  !isSaving && currentStepValid
-                    ? "bg-brand-primary text-white"
-                    : "bg-base-300 text-text-secondary cursor-not-allowed"
-                }`}
+                className={`px-6 py-2 rounded-lg font-semibold ${!isSaving && currentStepValid
+                  ? "bg-brand-primary text-white"
+                  : "bg-base-300 text-text-secondary cursor-not-allowed"
+                  }`}
               >
                 {isSaving ? "Saving..." : "Save Show"}
               </button>

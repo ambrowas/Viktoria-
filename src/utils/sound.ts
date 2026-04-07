@@ -8,9 +8,12 @@ function resolvePath(filename: string): string {
 
 type SoundHandle = {
   play: () => void;
+  pause: () => void;
   stop: () => void;
+  fadeOut: (duration?: number) => void;
   setPlaybackRate: (rate: number) => void;
   setVolume: (v: number) => void;
+  setLoop: (loop: boolean) => void;
   dispose: () => void;
 };
 
@@ -40,16 +43,41 @@ function createSound(filename: string, loop = false, volume = 0.5): SoundHandle 
           console.warn(`⚠️ Could not play sound (user gesture required?): ${filename}`)
         );
     },
+    pause: () => {
+      if (audio) audio.pause();
+    },
     stop: () => {
       if (!audio) return;
       audio.pause();
       audio.currentTime = 0;
+    },
+    fadeOut: (duration = 1000) => {
+      if (!audio) return;
+      const startVolume = audio.volume;
+      const step = startVolume / (duration / 50);
+      const interval = setInterval(() => {
+        if (!audio) {
+          clearInterval(interval);
+          return;
+        }
+        if (audio.volume > step) {
+          audio.volume -= step;
+        } else {
+          audio.volume = 0;
+          audio.pause();
+          audio.volume = startVolume; // Reset for next play
+          clearInterval(interval);
+        }
+      }, 50);
     },
     setPlaybackRate: (rate: number) => {
       if (audio) audio.playbackRate = rate;
     },
     setVolume: (v: number) => {
       if (audio) audio.volume = v;
+    },
+    setLoop: (loop: boolean) => {
+      if (audio) audio.loop = loop;
     },
     dispose: () => {
       if (!audio) return;
@@ -64,24 +92,24 @@ function createSound(filename: string, loop = false, volume = 0.5): SoundHandle 
 /* ---------------------------
  * 🎮 Legacy + Core Sounds
  * --------------------------- */
-export const flipSound        = createSound("flip.mp3");
-export const correctSound     = createSound("correct.mp3");
-export const wrongSound       = createSound("wrong.mp3");
-export const winSound         = createSound("win.mp3");
-export const loseSound        = createSound("lose.mp3");
-export const timerSound       = createSound("timer.mp3", true);
-export const victorySound     = createSound("victory.mp3", false, 0.9);
-export const transitionSound  = createSound("transition.mp3");
-export const plotagonSound    = createSound("plotagon.mp3");
-export const countdownSound   = createSound("drumming.wav", true, 0.7);
-export const correctoSound    = createSound("correcto.mp3", false, 0.95);
-export const strikeSound      = createSound("strike.mp3", false, 0.95);
-export const roundWinSound    = createSound("dance.mp3", false, 0.85);
-export const familyfeud       = createSound("familyfeud.wav", false, 0.85);
-export const buzzerSound      = createSound("buzzer.mp3", false, 0.9);
-export const failureSound     = createSound("failure.mp3", false, 0.9);
-export const magicalSound     = createSound("magical.mp3", false, 0.9);
-export const violinSound      = createSound("violin.mp3", false, 0.9);
+export const flipSound = createSound("flip.mp3");
+export const correctSound = createSound("correct.mp3");
+export const wrongSound = createSound("wrong.mp3");
+export const winSound = createSound("win.mp3");
+export const loseSound = createSound("lose.mp3");
+export const timerSound = createSound("timer.mp3", true);
+export const victorySound = createSound("victory.mp3", false, 0.9);
+export const transitionSound = createSound("transition.mp3");
+export const plotagonSound = createSound("plotagon.mp3");
+export const countdownSound = createSound("drumming.wav", true, 0.7);
+export const correctoSound = createSound("correcto.mp3", false, 0.95);
+export const strikeSound = createSound("strike.mp3", false, 0.95);
+export const roundWinSound = createSound("dance.mp3", false, 0.85);
+export const familyfeud = createSound("familyfeud.wav", false, 0.85);
+export const buzzerSound = createSound("buzzer.mp3", false, 0.9);
+export const failureSound = createSound("failure.mp3", false, 0.9);
+export const magicalSound = createSound("magical.mp3", false, 0.9);
+export const violinSound = createSound("violin.mp3", false, 0.9);
 
 /* ---------------------------
  * 💎 Lottery Experience Additions

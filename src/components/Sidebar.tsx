@@ -27,8 +27,8 @@ const NavItem: React.FC<{
   <button
     onClick={onClick}
     className={`flex items-center w-full px-4 py-3 transition-colors duration-200 rounded-lg ${isActive
-        ? "bg-brand-primary text-black shadow-lg"
-        : "text-text-secondary hover:bg-base-300 hover:text-white"
+      ? "bg-brand-primary text-black shadow-lg"
+      : "text-text-secondary hover:bg-base-300 hover:text-white"
       }`}
   >
     {icon}

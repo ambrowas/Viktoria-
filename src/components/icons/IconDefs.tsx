@@ -1,7 +1,26 @@
-import React from "react";
-import { Crown } from "lucide-react";
+import {
+  Crown,
+  Flame,
+  Zap,
+  Star,
+  Brain,
+  Rocket,
+  Target,
+  Music,
+  Gamepad2,
+  Trophy
+} from "lucide-react";
 
 export const CrownIcon = Crown;
+export const FlameIcon = Flame;
+export const ZapIcon = Zap;
+export const StarIcon = Star;
+export const BrainIcon = Brain;
+export const RocketIcon = Rocket;
+export const TargetIcon = Target;
+export const MusicIcon = Music;
+export const GamepadIcon = Gamepad2;
+export const TrophyIcon = Trophy;
 
 interface IconProps {
   className?: string;

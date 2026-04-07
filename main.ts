@@ -47,9 +47,15 @@ const userPrefsPath = path.join(app.getPath("userData"), "preferences.json");
 app.disableHardwareAcceleration();
 
 function createWindow() {
+  const isDev = process.env.NODE_ENV === "development" || !fs.existsSync(path.join(__dirname, "../dist/index.html"));
+  const iconPath = isDev
+    ? path.join(app.getAppPath(), "public", "icon.png")
+    : path.join(__dirname, "..", "dist", "icon.png");
+
   win = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -58,11 +64,9 @@ function createWindow() {
     },
   });
 
-  const isDev = process.env.NODE_ENV === "development" || !fs.existsSync(path.join(__dirname, "../dist/index.html"));
-
   if (isDev) {
     win.loadURL("http://localhost:5173");
-    win.webContents.openDevTools();
+    // win.webContents.openDevTools();
   } else {
     win.loadFile(path.join(__dirname, "../dist/index.html"));
   }

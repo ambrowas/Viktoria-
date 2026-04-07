@@ -10,6 +10,7 @@ import {
   timerSound,
   transitionSound,
 } from "@utils/sound";
+import { useSync } from "@/context/SyncContext";
 
 
 
@@ -52,6 +53,7 @@ interface FamilyFeudGameProps {
 }
 
 const FamilyFeudGame: React.FC<FamilyFeudGameProps> = ({ game, onExit }) => {
+  const { sessionData, updateSession, isRemoteMode } = useSync();
   const rounds = game?.rounds ?? [];
   const totalRounds = rounds.length;
 
@@ -74,6 +76,48 @@ const FamilyFeudGame: React.FC<FamilyFeudGameProps> = ({ game, onExit }) => {
     null
   );
   const [showTransition, setShowTransition] = useState(false);
+
+  // 📡 MISSION 07: SYNC STATE FROM FIRESTORE
+  useEffect(() => {
+    if (!isRemoteMode || !sessionData) return;
+
+    if (sessionData.currentRoundIndex !== undefined && sessionData.currentRoundIndex !== roundIndex) {
+      setRoundIndex(sessionData.currentRoundIndex);
+    }
+    if (sessionData.revealedAnswers) {
+      setRevealed(sessionData.revealedAnswers);
+    }
+    if (sessionData.strikes !== undefined) {
+      setStrikes(sessionData.strikes);
+    }
+    if (sessionData.activeTeam) {
+      setActiveTeam(sessionData.activeTeam as "A" | "B");
+    }
+
+    // Sync Scores from sessionData
+    if (sessionData.teamScores) {
+      const teams = Object.keys(sessionData.teamScores).sort();
+      const sA = sessionData.teamScores[teams[0]] || 0;
+      const sB = sessionData.teamScores[teams[1]] || 0;
+      setScores({ A: sA, B: sB });
+    }
+  }, [sessionData, isRemoteMode]);
+
+  // 📡 MISSION 07: LISTEN FOR REMOTE COMMANDS
+  useEffect(() => {
+    if (!isRemoteMode || !sessionData?.hostCommand) return;
+    const { type, payload } = sessionData.hostCommand;
+
+    if (type === 'feud_reveal') {
+      revealSpecific(payload.text);
+    } else if (type === 'feud_strike') {
+      wrongAnswer();
+    } else if (type === 'feud_switch_team') {
+      toggleTeam();
+    } else if (type === 'feud_next_round') {
+      endRound();
+    }
+  }, [sessionData?.hostCommand, isRemoteMode]);
 
   const currentRound = rounds[roundIndex];
   const isLastRound = roundIndex === totalRounds - 1;
@@ -107,7 +151,7 @@ const FamilyFeudGame: React.FC<FamilyFeudGameProps> = ({ game, onExit }) => {
     } else {
       // ⏰ Timer reached 0
       timerSound.stop();
-     // buzzerSound.play();
+      // buzzerSound.play();
       setIsTiming(false);
       setFlash("timeup");
       setTimeout(() => setFlash(null), 400);
@@ -142,7 +186,7 @@ const FamilyFeudGame: React.FC<FamilyFeudGameProps> = ({ game, onExit }) => {
     // If all answers revealed → auto stop + buzzer
     if (revealed.length + 1 === currentRound.answers.length) {
       timerSound.stop();
-     // buzzerSound.play();
+      // buzzerSound.play();
     }
   };
 
@@ -223,13 +267,12 @@ const FamilyFeudGame: React.FC<FamilyFeudGameProps> = ({ game, onExit }) => {
         {flash && (
           <motion.div
             key={flash}
-            className={`absolute inset-0 pointer-events-none z-40 ${
-              flash === "strike"
-                ? "bg-red-600"
-                : flash === "timeup"
+            className={`absolute inset-0 pointer-events-none z-40 ${flash === "strike"
+              ? "bg-red-600"
+              : flash === "timeup"
                 ? "bg-yellow-500"
                 : "bg-green-600"
-            }`}
+              }`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.25 }}
             exit={{ opacity: 0 }}
@@ -289,11 +332,10 @@ const FamilyFeudGame: React.FC<FamilyFeudGameProps> = ({ game, onExit }) => {
               key={a.text}
               disabled={revealed.includes(a.text)}
               onClick={() => revealSpecific(a.text)}
-              className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                revealed.includes(a.text)
-                  ? "bg-white/15 text-white/50"
-                  : "bg-white/10 hover:bg-white/20 text-white"
-              }`}
+              className={`px-3 py-2 rounded-lg text-sm font-semibold ${revealed.includes(a.text)
+                ? "bg-white/15 text-white/50"
+                : "bg-white/10 hover:bg-white/20 text-white"
+                }`}
             >
               {a.text}
             </button>
@@ -310,10 +352,9 @@ const FamilyFeudGame: React.FC<FamilyFeudGameProps> = ({ game, onExit }) => {
               <div
                 className="h-3 bg-yellow-400 transition-all duration-1000"
                 style={{
-                  width: `${
-                    ((timeLeft ?? ROUND_TIMER_SECONDS) / ROUND_TIMER_SECONDS) *
+                  width: `${((timeLeft ?? ROUND_TIMER_SECONDS) / ROUND_TIMER_SECONDS) *
                     100
-                  }%`,
+                    }%`,
                 }}
               />
             </div>

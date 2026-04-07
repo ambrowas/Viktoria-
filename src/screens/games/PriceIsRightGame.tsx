@@ -1,15 +1,30 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { PriceIsRightGame } from "@/types";
+import type { PriceIsRightGame, Team } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { magicalSound, strikeSound, violinSound, timerSound } from "@/utils/sound";
 
-interface Props {
+interface PriceIsRightProps {
   game: PriceIsRightGame;
+  teams: Team[];
+  teamScores: Record<string, number>;
+  onScoreChange: (teamId: string, score: number) => void;
+  onExit?: (points?: Record<string, number>) => void;
   onClose?: () => void;
+  hostControl?: "ipad" | "manual";
+  playerControl?: "ipad" | "manual";
 }
 
-export default function PriceIsRightGame({ game, onClose }: Props) {
+const PriceIsRightGame: React.FC<PriceIsRightProps> = ({
+  game,
+  teams,
+  teamScores,
+  onScoreChange,
+  onExit,
+  onClose,
+  hostControl = 'ipad',
+  playerControl = 'ipad'
+}) => {
   const [intro, setIntro] = useState(true);
   const [flashOn, setFlashOn] = useState(false);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
@@ -65,6 +80,7 @@ export default function PriceIsRightGame({ game, onClose }: Props) {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => { });
     }
+    if (onExit) onExit({});
     if (onClose) onClose();
   }
 
@@ -237,4 +253,6 @@ export default function PriceIsRightGame({ game, onClose }: Props) {
       </div>
     </>
   );
-}
+};
+
+export default PriceIsRightGame;

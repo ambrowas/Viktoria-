@@ -1,15 +1,19 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Game, GameType } from "@/types";
+import { Game, GameType, Team } from "@/types";
 import { Play, Edit2, Trash2, Filter, Search, PlusCircle, Zap } from "lucide-react";
+import TeamIcon from "@/components/TeamIcon";
 
 interface LibraryProps {
   games: Game[];
   onPlay: (game: Game) => void;
-  onQuickPlay: (game: Game, numTeams: number) => void;
+  onQuickPlay: (game: Game, teams: Team[]) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onCreateNew: () => void;
 }
+
+const TEAM_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#f97316", "#14b8a6"];
+const TEAM_ICONS = ["flame", "zap", "star", "brain", "rocket", "target", "music", "gamepad", "trophy", "crown"];
 
 const typeColors: Record<string, string> = {
   MEMORY: "#2b6cb0",
@@ -40,7 +44,40 @@ const GameLibrary: React.FC<LibraryProps> = ({
 
   // 🏁 Quick Play state
   const [quickPlayGame, setQuickPlayGame] = useState<Game | null>(null);
+  const [quickPlayStep, setQuickPlayStep] = useState<1 | 2>(1);
   const [quickPlayTeams, setQuickPlayTeams] = useState(2);
+  const [draftTeams, setDraftTeams] = useState<Team[]>([]);
+
+  const handleOpenQuickPlay = (game: Game) => {
+    setQuickPlayGame(game);
+    setQuickPlayStep(1);
+    setQuickPlayTeams(2);
+    setDraftTeams(generateTeams(2));
+  };
+
+  const generateTeams = (count: number): Team[] => {
+    return Array.from({ length: count }, (_, i) => ({
+      id: crypto.randomUUID(),
+      name: `Equipo ${i + 1}`,
+      score: 0,
+      color: TEAM_COLORS[i % TEAM_COLORS.length],
+      emoji: TEAM_ICONS[i % TEAM_ICONS.length],
+      players: [],
+    }));
+  };
+
+  const handleSetQuickPlayTeams = (num: number) => {
+    setQuickPlayTeams(num);
+    setDraftTeams(generateTeams(num));
+  };
+
+  const updateDraftTeam = (index: number, updates: Partial<Team>) => {
+    setDraftTeams((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], ...updates };
+      return next;
+    });
+  };
 
   // 🧠 Log once when games update
   useEffect(() => {
@@ -148,7 +185,7 @@ const GameLibrary: React.FC<LibraryProps> = ({
                   <Play size={16} />
                 </button>
                 <button
-                  onClick={() => setQuickPlayGame(game)}
+                  onClick={() => handleOpenQuickPlay(game)}
                   title="Partida Rápida (con Equipos)"
                   className="p-2 border border-gray-600 rounded-md hover:border-[#facc15] hover:text-[#facc15] transition"
                 >
@@ -196,44 +233,112 @@ const GameLibrary: React.FC<LibraryProps> = ({
       {/* 🏁 Quick Play Team Selection Modal */}
       {quickPlayGame && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-          <div className="bg-[#1b2132] border border-[#2f3b57] rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center">
-            <h3 className="text-2xl font-bold mb-2 text-white">⚡️ Partida Rápida</h3>
-            <p className="text-gray-400 text-sm mb-6">
-              Selecciona cuántos equipos participarán en "{quickPlayGame.name}"
-            </p>
+          <div className="bg-[#1b2132] border border-[#2f3b57] rounded-2xl shadow-2xl p-8 max-w-lg w-full">
+            
+            {quickPlayStep === 1 ? (
+              <div className="text-center">
+                <h3 className="text-2xl font-bold mb-2 text-white">⚡️ Partida Rápida</h3>
+                <p className="text-gray-400 text-sm mb-6">
+                  Selecciona cuántos equipos participarán en "{quickPlayGame.name}"
+                </p>
 
-            <div className="flex justify-center gap-4 mb-8">
-              {[2, 3, 4].map((num) => (
-                <button
-                  key={num}
-                  onClick={() => setQuickPlayTeams(num)}
-                  className={`w-14 h-14 rounded-xl font-bold text-xl transition-all border-2 ${quickPlayTeams === num
-                      ? "bg-yellow-400 border-yellow-300 text-black scale-110 shadow-[0_0_20px_rgba(250,204,21,0.4)]"
-                      : "bg-[#2b3247] border-[#2f3b57] text-gray-400 hover:border-gray-500"
-                    }`}
-                >
-                  {num}
-                </button>
-              ))}
-            </div>
+                <div className="flex justify-center gap-4 mb-8">
+                  {[2, 3, 4].map((num) => (
+                    <button
+                      key={num}
+                      onClick={() => handleSetQuickPlayTeams(num)}
+                      className={`w-14 h-14 rounded-xl font-bold text-xl transition-all border-2 ${quickPlayTeams === num
+                          ? "bg-yellow-400 border-yellow-300 text-black scale-110 shadow-[0_0_20px_rgba(250,204,21,0.4)]"
+                          : "bg-[#2b3247] border-[#2f3b57] text-gray-400 hover:border-gray-500"
+                        }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
 
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => {
-                  onQuickPlay(quickPlayGame, quickPlayTeams);
-                  setQuickPlayGame(null);
-                }}
-                className="w-full py-3 bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-xl transition-colors shadow-lg"
-              >
-                ¡Comenzar Juego!
-              </button>
-              <button
-                onClick={() => setQuickPlayGame(null)}
-                className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => setQuickPlayStep(2)}
+                    className="w-full py-3 bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-xl transition-colors shadow-lg"
+                  >
+                    Siguiente
+                  </button>
+                  <button
+                    onClick={() => setQuickPlayGame(null)}
+                    className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-left">
+                <h3 className="text-xl font-bold mb-1 text-white">Configurar Equipos</h3>
+                <p className="text-gray-400 text-xs mb-4">Personaliza los nombres, colores e iconos de los equipos.</p>
+                
+                <div className="flex flex-col gap-3 mb-6 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                  {draftTeams.map((team, idx) => (
+                    <div key={team.id} className="bg-[#2b3247] border border-[#2f3b57] p-3 rounded-xl flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-1">
+                        <div 
+                          className="w-8 h-8 rounded flex items-center justify-center shrink-0 border"
+                          style={{ borderColor: team.color, color: team.color, backgroundColor: `${team.color}15` }}
+                        >
+                          <TeamIcon iconName={team.emoji} className="w-5 h-5" />
+                        </div>
+                        <input
+                          type="text"
+                          value={team.name}
+                          onChange={(e) => updateDraftTeam(idx, { name: e.target.value })}
+                          className="w-full bg-[#1b2132] border border-[#2f3b57] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-gray-400"
+                          placeholder={`Equipo ${idx + 1}`}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={team.emoji || ""}
+                          onChange={(e) => updateDraftTeam(idx, { emoji: e.target.value })}
+                          className="w-10 bg-[#1b2132] border border-[#2f3b57] rounded-lg px-1 py-1.5 text-xs text-center text-white focus:outline-none appearance-none"
+                          style={{ textAlignLast: 'center' }}
+                        >
+                          {TEAM_ICONS.map((icon) => (
+                            <option key={`${team.id}-icon-${icon}`} value={icon}>
+                              {icon}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="color"
+                          value={team.color || "#ffffff"}
+                          onChange={(e) => updateDraftTeam(idx, { color: e.target.value })}
+                          className="w-8 h-8 p-0 rounded-lg bg-transparent border-none cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setQuickPlayStep(1)}
+                    className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl transition-colors font-bold text-sm"
+                  >
+                    Atrás
+                  </button>
+                  <button
+                    onClick={() => {
+                      onQuickPlay(quickPlayGame, draftTeams);
+                      setQuickPlayGame(null);
+                    }}
+                    className="w-2/3 py-3 bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-xl transition-colors shadow-lg"
+                  >
+                    ¡Comenzar Juego!
+                  </button>
+                </div>
+              </div>
+            )}
+            
           </div>
         </div>
       )}

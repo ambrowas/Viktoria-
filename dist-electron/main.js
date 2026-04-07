@@ -41,9 +41,14 @@ const userPrefsPath = path_1.default.join(electron_1.app.getPath("userData"), "p
 // Disable GPU to avoid EGL driver issues that can freeze the UI on some Macs/VMs
 electron_1.app.disableHardwareAcceleration();
 function createWindow() {
+    const isDev = process.env.NODE_ENV === "development" || !fs_1.default.existsSync(path_1.default.join(__dirname, "../dist/index.html"));
+    const iconPath = isDev
+        ? path_1.default.join(electron_1.app.getAppPath(), "public", "icon.png")
+        : path_1.default.join(__dirname, "..", "dist", "icon.png");
     win = new electron_1.BrowserWindow({
         width: 1200,
         height: 800,
+        icon: iconPath,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -51,10 +56,9 @@ function createWindow() {
             preload: path_1.default.join(__dirname, "preload.js"),
         },
     });
-    const isDev = process.env.NODE_ENV === "development" || !fs_1.default.existsSync(path_1.default.join(__dirname, "../dist/index.html"));
     if (isDev) {
         win.loadURL("http://localhost:5173");
-        win.webContents.openDevTools();
+        // win.webContents.openDevTools();
     }
     else {
         win.loadFile(path_1.default.join(__dirname, "../dist/index.html"));

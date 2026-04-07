@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Lottie from "lottie-react";
-import type { JeopardyGame, JeopardyCategory, JeopardyQuestion, JeopardyTurnMode } from "@/types";
+import { JeopardyGame, JeopardyCategory, JeopardyQuestion, JeopardyTurnMode } from "@/types";
+import { useSync } from "@/context/SyncContext";
 import { correctSound, wrongSound } from "@/utils/sound";
 import { resolveMediaUrl } from "@/utils/media";
 import fireworksAnimation from "@/assets/animations/fireworks.json";
@@ -91,6 +92,8 @@ const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" }> = ({ type }) => {
 const otherTeam = (team: 0 | 1) => (team === 0 ? 1 : 0) as 0 | 1;
 
 const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+  const { sessionData, updateSession, isRemoteMode } = useSync();
+
   const [active, setActive] = useState<{
     category: JeopardyCategory;
     question: JeopardyQuestion;
@@ -111,6 +114,65 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
     { remaining: initialClueCount, usedTypes: [] },
     { remaining: initialClueCount, usedTypes: [] },
   ]);
+
+  // 📡 MISSION 05/06: SYNC STATE FROM FIRESTORE
+  useEffect(() => {
+    if (!isRemoteMode || !sessionData) return;
+
+    // 1. Sync used IDs
+    if (sessionData.usedQuestionIds) {
+      setUsedIds(new Set(sessionData.usedQuestionIds));
+    }
+
+    // 2. Sync Scores
+    if (sessionData.teamScores) {
+      const teams = Object.keys(sessionData.teamScores).sort();
+      const s1 = sessionData.teamScores[teams[0]] || 0;
+      const s2 = sessionData.teamScores[teams[1]] || 0;
+      setTeamScores([s1, s2]);
+    }
+
+    // 3. Sync Answer Reveal
+    if (sessionData.isAnswerRevealed !== undefined) {
+      setShowAnswer(sessionData.isAnswerRevealed);
+    }
+  }, [sessionData, isRemoteMode]);
+
+  // 📡 MISSION 06: QUESTION AUTO-OPENER
+  useEffect(() => {
+    if (!isRemoteMode || !sessionData?.activeQuestionId) {
+      if (!sessionData?.activeQuestionId && active) setActive(null);
+      return;
+    }
+
+    const qId = sessionData.activeQuestionId;
+    if (active?.question.id !== qId) {
+      // Find the question in the local game object
+      game.categories.forEach(cat => {
+        const q = cat.questions.find(qq => qq.id === qId);
+        if (q) {
+          setActive({ category: cat, question: q as JeopardyQuestion });
+          setShowAnswer(sessionData.isAnswerRevealed || false);
+          setTimeLeft(TIMER_DURATION);
+          setIsTimerRunning(true);
+        }
+      });
+    }
+  }, [sessionData?.activeQuestionId, sessionData?.isAnswerRevealed, isRemoteMode, game.categories]);
+
+  // 📡 MISSION 05/06: LISTEN FOR REMOTE ACTIONS
+  useEffect(() => {
+    if (!isRemoteMode || !sessionData?.hostCommand) return;
+    const { type } = sessionData.hostCommand;
+
+    if (type === 'correct') {
+      handleCorrect();
+    } else if (type === 'wrong') {
+      handleWrong();
+    } else if (type === 'show_answer' || type === 'REVEAL_ANSWER') {
+      setShowAnswer(true);
+    }
+  }, [sessionData?.hostCommand, isRemoteMode]);
 
   // Timer effect
   useEffect(() => {
@@ -154,7 +216,11 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
   }, [game.categories]);
 
   const markUsed = (id: string) => {
-    setUsedIds((prev) => new Set(prev).add(id));
+    const next = new Set(usedIds).add(id);
+    setUsedIds(next);
+    if (isRemoteMode) {
+      updateSession({ usedQuestionIds: Array.from(next) });
+    }
   };
 
   const clearQuestionState = () => {
@@ -164,6 +230,14 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
     setHasReboundAttempted(false);
     setActiveClue(null);
     setShowClueMenu(false);
+
+    if (isRemoteMode) {
+      updateSession({
+        activeQuestionId: null,
+        activeCategoryId: null,
+        isAnswerRevealed: false
+      });
+    }
   };
 
   const showFeedback = (
@@ -194,7 +268,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
     setActiveClue(null);
     setShowClueMenu(false);
   };
-  
+
   const handleCorrect = () => {
     if (!active) return;
     const pts = active.question.points || 0;
@@ -219,6 +293,17 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
     newScores[answeringTeam] += pts;
     setTeamScores(newScores);
 
+    // 📡 SYNC SCORE BACK TO FIRESTORE
+    if (isRemoteMode && sessionData?.teamScores) {
+      const teams = Object.keys(sessionData.teamScores).sort();
+      updateSession({
+        teamScores: {
+          ...sessionData.teamScores,
+          [teams[answeringTeam]]: newScores[answeringTeam]
+        }
+      });
+    }
+
     markUsed(active.question.id);
     setIsTimerRunning(false);
     showFeedback("correct");
@@ -238,6 +323,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
       setTimeLeft(TIMER_DURATION);
       setIsTimerRunning(true);
       showFeedback("wrong", { closeAfter: false, durationMs: 1200 });
+
+      if (isRemoteMode) {
+        updateSession({ currentTeamIndex: nextTeam, hasReboundAttempted: true });
+      }
       return;
     }
 
@@ -247,6 +336,14 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
 
     const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : currentTeamIndex;
     advanceTurnAfterResolution("wrong", turnBasis);
+
+    if (isRemoteMode) {
+      updateSession({
+        activeQuestionId: null,
+        hasReboundAttempted: false,
+        currentTeamIndex: (turnBasis === 0 ? 1 : 0) // Basic flip for wrong answer
+      });
+    }
   };
 
   const teamLabel = (index: 0 | 1) => game.teams?.[index] || `Team ${index + 1}`;
@@ -351,11 +448,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
             {([0, 1] as const).map((index) => (
               <div
                 key={index}
-                className={`px-3 py-1 rounded-lg border transition-all ${
-                  currentTeamIndex === index
-                    ? "bg-yellow-400 text-black border-yellow-300 scale-110"
-                    : "bg-slate-800 text-slate-200 border-slate-600"
-                }`}
+                className={`px-3 py-1 rounded-lg border transition-all ${currentTeamIndex === index
+                  ? "bg-yellow-400 text-black border-yellow-300 scale-110"
+                  : "bg-slate-800 text-slate-200 border-slate-600"
+                  }`}
               >
                 <div className="flex items-baseline gap-1">
                   <span className="font-bold">{teamLabel(index)}</span>
@@ -418,11 +514,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
                     key={`${cat.id}-${points}`}
                     disabled={isUsed}
                     onClick={() => openQuestion(cat, q)}
-                    className={`h-28 flex items-center justify-center font-extrabold text-4xl rounded-b-lg border shadow-md transition-all ${
-                      isUsed
-                        ? "bg-white p-1 cursor-not-allowed"
-                        : "bg-blue-700 hover:bg-blue-500 text-yellow-300 border-blue-400 hover:scale-[1.02]"
-                    }`}
+                    className={`h-28 flex items-center justify-center font-extrabold text-4xl rounded-b-lg border shadow-md transition-all ${isUsed
+                      ? "bg-white p-1 cursor-not-allowed"
+                      : "bg-blue-700 hover:bg-blue-500 text-yellow-300 border-blue-400 hover:scale-[1.02]"
+                      }`}
                     title={isUsed ? "Question answered" : `${cat.name} · $${points}`}
                   >
                     {isUsed ? (
@@ -673,9 +768,8 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
                           key={type}
                           onClick={() => useClue(type)}
                           disabled={disabled}
-                          className={`text-left bg-slate-700 rounded-lg p-3 border ${
-                            disabled ? "border-slate-600 opacity-50 cursor-not-allowed" : "border-blue-500 hover:bg-slate-600"
-                          }`}
+                          className={`text-left bg-slate-700 rounded-lg p-3 border ${disabled ? "border-slate-600 opacity-50 cursor-not-allowed" : "border-blue-500 hover:bg-slate-600"
+                            }`}
                         >
                           <div className="font-semibold text-white">{label}</div>
                           <p className="text-xs text-slate-200">{desc}</p>

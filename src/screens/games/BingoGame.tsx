@@ -16,38 +16,11 @@ import fireworks from "@/assets/animations/fireworks.json";  // line win
 import fire from "@/assets/animations/fire.json";            // diagonal win
 import party from "@/assets/animations/party.json";          // full card
 
-// If you already exported these from "@/types", use those.
-// The local fallbacks below keep this component standalone-safe.
-type BingoCard = {
-  id: string;
-  grid: number[][];       // 5x5
-  hasFreeSpace?: boolean; // center free
-};
-
-type BingoRound = {
-  id: string;
-  topic: string;
-  mode: "CLASSIC" | "90BALL" | "CONCEPTUAL";
-  cards: BingoCard[];
-  createdAt: string;
-};
-
-type BingoGameType = {
-  id: string;
-  name: string;
-  description?: string;
-  type: string; // if you have GameType.BINGO, it’s fine to keep 'string' here
-  round: BingoRound | null;
-};
-
-interface Props {
-  game: BingoGameType;
-  onExit: () => void;
-}
+import { BingoGame as BingoGameType, BingoRound, BingoCard, Team } from "@/types";
 
 /* =========================================
    Helpers
-========================================= */
+ ========================================= */
 const range = (start: number, end: number) =>
   Array.from({ length: end - start + 1 }, (_, i) => start + i);
 
@@ -86,41 +59,58 @@ const generateClassicCard = (): BingoCard => {
   };
 };
 
-/* =========================================
-   Component
-========================================= */
-const BingoGame: React.FC<Props> = ({ game, onExit }) => {
+interface BingoProps {
+  game: BingoGameType;
+  round: BingoRound | null;
+  teams: Team[];
+  teamScores: Record<string, number>;
+  onScoreChange: (teamId: string, score: number) => void;
+  onExit: (points?: Record<string, number>) => void;
+  hostControl?: "ipad" | "manual";
+  playerControl?: "ipad" | "manual";
+}
+
+const BingoGame: React.FC<BingoProps> = ({
+  game,
+  round,
+  teams,
+  teamScores,
+  onScoreChange,
+  onExit,
+  hostControl = 'ipad',
+  playerControl = 'ipad'
+}) => {
   // pick first card of the round, fallback to auto
-const card: BingoCard = useMemo(() => {
-  const provided = game.round?.cards?.[0];
+  const card: BingoCard = useMemo(() => {
+    const provided = round?.cards?.[0];
 
-  if (!provided) return generateClassicCard();
+    if (!provided) return generateClassicCard();
 
-  // 🔍 Firestore-safe unwrapping: convert [{row:[...]}] → [[...]]
-  let grid: number[][] = [];
+    // 🔍 Firestore-safe unwrapping: convert [{row:[...]}] → [[...]]
+    let grid: (number | string)[][] = [];
 
-  if (Array.isArray(provided.grid) && provided.grid.length > 0) {
-    if (Array.isArray(provided.grid[0])) {
-      // ✅ Already a matrix
-      grid = provided.grid as number[][];
-    } else if (typeof provided.grid[0] === "object" && "row" in provided.grid[0]) {
-      // 🔄 Firestore format: unwrap
-      grid = (provided.grid as any[]).map((r) => r.row || []);
+    if (Array.isArray(provided.grid) && provided.grid.length > 0) {
+      if (Array.isArray(provided.grid[0])) {
+        // ✅ Already a matrix
+        grid = provided.grid as (number | string)[][];
+      } else if (typeof provided.grid[0] === "object" && "row" in provided.grid[0]) {
+        // 🔄 Firestore format: unwrap
+        grid = (provided.grid as any[]).map((r) => r.row || []);
+      }
     }
-  }
 
-  // fallback if still invalid
-  if (grid.length !== 5 || grid.some((r) => r.length !== 5)) {
-    grid = generateClassicCard().grid;
-  }
+    // fallback if still invalid
+    if (grid.length !== 5 || grid.some((r) => r.length !== 5)) {
+      grid = generateClassicCard().grid;
+    }
 
-  // ensure free center
-  if (provided.hasFreeSpace && grid[2] && grid[2][2] !== 0) {
-    grid[2][2] = 0;
-  }
+    // ensure free center
+    if (provided.hasFreeSpace && grid[2] && grid[2][2] !== 0) {
+      grid[2][2] = 0;
+    }
 
-  return { ...provided, grid };
-}, [game.round]);
+    return { ...provided, grid: grid as number[][] };
+  }, [round]);
 
   // Full 1..75 shuffled draw queue
   const fullDeck = useMemo<number[]>(() => shuffle(range(1, 75)), []);
@@ -153,12 +143,15 @@ const card: BingoCard = useMemo(() => {
 
   // Marked matrix (derived): true if the number is in calledNumbers OR free center (0)
   const marked = useMemo<boolean[][]>(() => {
-    const set = new Set(calledNumbers);
+    const drawnSet = new Set(calledNumbers);
     return card.grid.map((row, r) =>
       row.map((val, c) => {
-        if (card.hasFreeSpace && r === 2 && c === 2) return true; // center free
-        if (val === 0) return true; // safeguard if 0 used as free
-        return set.has(val);
+        // Check for free space based on card property or value 0
+        if (card.hasFreeSpace && r === 2 && c === 2) return true;
+        if (val === 0) return true; // Safeguard if 0 is used as a free space sentinel
+
+        // Check if the number has been called
+        return drawnSet.has(val as number);
       })
     );
   }, [calledNumbers, card]);
@@ -214,7 +207,7 @@ const card: BingoCard = useMemo(() => {
     }
 
     // Full card
-    const all = marked.every((row) => row.every(Boolean));
+    const all = (marked as boolean[][]).every((row) => row.every(Boolean));
     if (all && !fullCardWin) {
       // stop ambience and celebrate
       suspenseSound.stop();
@@ -301,7 +294,7 @@ const card: BingoCard = useMemo(() => {
             {card.grid.map((row, r) =>
               row.map((val, c) => {
                 const isFree = (card.hasFreeSpace && r === 2 && c === 2) || val === 0;
-                const isCalled = isFree || calledNumbers.includes(val);
+                const isCalled = isFree || calledNumbers.includes(val as number); // Cast val to number for includes
                 return (
                   <motion.div
                     key={`${r}-${c}`}
@@ -378,7 +371,8 @@ const card: BingoCard = useMemo(() => {
 
           {/* Exit */}
           <button
-            onClick={onExit}
+            type="button"
+            onClick={() => onExit()}
             className="mt-4 w-full bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
           >
             Exit Game

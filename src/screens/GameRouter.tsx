@@ -25,6 +25,7 @@ import BingoGame from "./games/BingoGame"; // ✅ NEW
 
 // --- Sounds ---
 import { transitionSound, magicalSound, stopAllSounds } from "@/utils/sound";
+import { useLanguage } from "@/context/LanguageContext";
 
 // --- Game Map ---
 const gameComponents: Record<GameType, React.FC<any>> = {
@@ -42,18 +43,38 @@ const gameComponents: Record<GameType, React.FC<any>> = {
   [GameType.BINGO]: BingoGame, // ✅ Added here
 };
 
+import type { Team } from "@/types";
+
 interface GameRouterProps {
   game: Game;
-  onExit: () => void;
+  teams: Team[];
+  teamScores: Record<string, number>;
+  onScoreChange: (teamId: string, score: number) => void;
+  onExit: (points?: Record<string, number>) => void;
+  language?: "en" | "es";
+  hostControl?: "ipad" | "manual";
+  playerControl?: "ipad" | "manual";
 }
 
-const GameRouter: React.FC<GameRouterProps> = ({ game, onExit }) => {
+const GameRouter: React.FC<GameRouterProps> = ({
+  game,
+  teams,
+  teamScores,
+  onScoreChange,
+  onExit,
+  language,
+  hostControl = 'ipad',
+  playerControl = 'ipad'
+}) => {
+  const { lang: globalLang } = useLanguage();
+  const lang = language || globalLang;
+
   const [isTransitioning, setIsTransitioning] = useState(true);
 
   useEffect(() => {
     // 🎵 Play transition sounds
-    transitionSound.play();
-    magicalSound.play();
+    // transitionSound.play();
+    // magicalSound.play();
 
     // ⏳ Show transition for ~2 seconds
     const timer = setTimeout(() => setIsTransitioning(false), 2000);
@@ -66,14 +87,17 @@ const GameRouter: React.FC<GameRouterProps> = ({ game, onExit }) => {
   const Component = gameComponents[game.type as GameType];
 
   if (isTransitioning) {
+    const text = lang === "en" ? "🎬 Let's Go!" : "🎬 ¡El Juego Comienza!";
+    const loadingText = lang === "en" ? "Loading game..." : "Cargando juego...";
+
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-black">
         <div className="animate-pulse text-center">
           <h1 className="text-6xl font-bold text-yellow-400 drop-shadow-lg mb-6 animate-bounce">
-            🎬 ¡El Juego Comienza!
+            {text}
           </h1>
           <p className="text-lg text-gray-300 animate-fade">
-            {game.name || "Cargando juego..."}
+            {game.name || loadingText}
           </p>
         </div>
       </div>
@@ -90,7 +114,7 @@ const GameRouter: React.FC<GameRouterProps> = ({ game, onExit }) => {
             player is still under development.
           </p>
           <button
-            onClick={onExit}
+            onClick={() => onExit()}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
           >
             Back to Library
@@ -106,8 +130,8 @@ const GameRouter: React.FC<GameRouterProps> = ({ game, onExit }) => {
       (game as MemoryGameType).gridSize === "Small"
         ? 16
         : (game as MemoryGameType).gridSize === "Medium"
-        ? 20
-        : 28;
+          ? 20
+          : 28;
 
     return (
       <Component
@@ -119,7 +143,18 @@ const GameRouter: React.FC<GameRouterProps> = ({ game, onExit }) => {
   }
 
   // ✅ Default for all other games (including Bingo)
-  return <Component game={game as any} onExit={onExit} />;
+  return (
+    <Component
+      game={game as any}
+      round={(game as any).round} // For Bingo 
+      teams={teams}
+      teamScores={teamScores}
+      onScoreChange={onScoreChange}
+      onExit={onExit}
+      hostControl={hostControl}
+      playerControl={playerControl}
+    />
+  );
 };
 
 export default GameRouter;

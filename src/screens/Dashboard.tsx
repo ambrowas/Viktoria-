@@ -214,6 +214,12 @@ const Dashboard: React.FC<DashboardProps> = ({
           />
         </div>
       </section>
+
+      {/* ================= FOOTER ================= */}
+      <footer className="pt-8 border-t border-base-200 opacity-20 text-[10px] font-mono flex justify-between uppercase tracking-widest">
+        <span>Viktoria GameShow Studio</span>
+        <span>Build Version: v1.0.43</span>
+      </footer>
     </div>
   );
 };

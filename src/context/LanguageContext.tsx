@@ -17,6 +17,13 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     const loadLanguage = async () => {
       try {
+        if (!window.electronAPI) {
+          const storedLang = localStorage.getItem("viktoria_lang");
+          if (storedLang === "en" || storedLang === "es") {
+            setLang(storedLang);
+          }
+          return;
+        }
         const storedLang = await window.electronAPI.invoke("get-language");
         if (storedLang === "en" || storedLang === "es") {
           setLang(storedLang);
@@ -30,12 +37,17 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // ✅ Save changes to main process
   const saveLanguage = async (newLang: Language) => {
-    try {
-      await window.electronAPI.invoke("set-language", newLang);
-      setLang(newLang);
-    } catch (error) {
-      console.error("Failed to save language preference:", error);
-    }
+      try {
+        if (!window.electronAPI) {
+          localStorage.setItem("viktoria_lang", newLang);
+          setLang(newLang);
+          return;
+        }
+        await window.electronAPI.invoke("set-language", newLang);
+        setLang(newLang);
+      } catch (error) {
+        console.error("Failed to save language preference:", error);
+      }
   };
 
   const toggleLanguage = () => {

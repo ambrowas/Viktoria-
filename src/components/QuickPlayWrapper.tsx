@@ -3,29 +3,73 @@ import { Game, Team, Player } from "@/types";
 import GameRouter from "@/screens/GameRouter";
 import { Minus, Plus, X, Users, Trophy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import TeamIcon from "@/components/TeamIcon";
+import { useSync } from "@/context/SyncContext";
+import { magicalSound, stopAllSounds } from "@/utils/sound";
 
 interface QuickPlayWrapperProps {
     game: Game;
-    numTeams: number;
+    teams: Team[];
     onExit: () => void;
 }
 
 const TEAM_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#f97316", "#14b8a6"];
-const TEAM_EMOJIS = ["🔥", "⚡️", "🌟", "🧠", "🚀", "🎯", "🎵", "🎮", "🦊", "🐼"];
+const TEAM_ICONS = ["flame", "zap", "star", "brain", "rocket", "target", "music", "gamepad", "trophy", "crown"];
 
-export default function QuickPlayWrapper({ game, numTeams, onExit }: QuickPlayWrapperProps) {
-    const [teams, setTeams] = useState<Team[]>(() =>
-        Array.from({ length: numTeams }, (_, i) => ({
-            id: crypto.randomUUID(),
-            name: `Equipo ${i + 1}`,
-            score: 0,
-            color: TEAM_COLORS[i % TEAM_COLORS.length],
-            emoji: TEAM_EMOJIS[i % TEAM_EMOJIS.length],
-            players: []
-        }))
-    );
+export default function QuickPlayWrapper({ game, teams: initialTeams, onExit }: QuickPlayWrapperProps) {
+    const { updateSession, startSession, leaveSession, isRemoteMode } = useSync();
+
+    const [teams, setTeams] = useState<Team[]>(initialTeams);
 
     const [showScoreboard, setShowScoreboard] = useState(true);
+
+    // 📡 MISSION 29: Sync Quick Play state with remote Host iPad
+    React.useEffect(() => {
+        if (isRemoteMode) {
+            updateSession({
+                currentGameId: game.id,
+                currentStep: game.type.toLowerCase(),
+                fullGameData: game,
+                teamScores: Object.fromEntries(teams.map(t => [t.id, t.score]))
+            });
+        }
+    }, [game, teams, isRemoteMode, updateSession]);
+
+    // 🎧 Listen for Host Commands coming from the iPad
+    const lastCommandTimestamp = React.useRef<number>(0);
+    const { sessionData } = useSync();
+
+    React.useEffect(() => {
+        if (!isRemoteMode || !sessionData?.hostCommand) return;
+
+        const cmd = (sessionData as any).hostCommand;
+        const ts = cmd.timestamp || 0;
+        
+        // Skip if already processed
+        if (ts > 0 && ts <= lastCommandTimestamp.current) return;
+        if (ts > 0) lastCommandTimestamp.current = ts;
+
+        const { type, payload } = cmd;
+
+        if (type === 'quit_to_lobby') {
+            onExit();
+        }
+
+        if (type === 'play_bg_music' || type === 'play_audio') {
+            if (payload?.soundId === 'viktoria') {
+                magicalSound.loop = false;
+                magicalSound.play();
+            }
+        }
+
+        if (type === 'pause_bg_music') {
+            magicalSound.pause();
+        }
+
+        if (type === 'emergency_mute') {
+            stopAllSounds();
+        }
+    }, [isRemoteMode, sessionData?.hostCommand, onExit]);
 
     const updateScore = (teamId: string, delta: number) => {
         setTeams(prev => prev.map(t =>
@@ -43,7 +87,15 @@ export default function QuickPlayWrapper({ game, numTeams, onExit }: QuickPlayWr
         <div className="relative h-screen w-screen overflow-hidden bg-black">
             {/* 🎮 The Game Itself */}
             <div className="h-full w-full">
-                <GameRouter game={game} onExit={onExit} />
+                <GameRouter
+                    game={game}
+                    onExit={onExit}
+                    teams={teams}
+                    teamScores={Object.fromEntries(teams.map(t => [t.id, t.score]))}
+                    onScoreChange={(teamId, score) => {
+                        setTeams(prev => prev.map(t => t.id === teamId ? { ...t, score } : t));
+                    }}
+                />
             </div>
 
             {/* 🏆 Quick Scoreboard Container */}
@@ -70,7 +122,7 @@ export default function QuickPlayWrapper({ game, numTeams, onExit }: QuickPlayWr
                                     style={{ borderTop: `4px solid ${team.color}` }}
                                 >
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-xl">{team.emoji}</span>
+                                        <TeamIcon iconName={team.emoji} className="w-5 h-5" style={{ color: team.color }} />
                                         <input
                                             type="text"
                                             value={team.name}

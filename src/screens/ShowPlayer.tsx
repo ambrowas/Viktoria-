@@ -5,6 +5,7 @@ interface ShowPlayerProps {
   shows: Show[];
   games: Game[];
   onPlayGame: (game: Game) => void;
+  onStartShow: (show: Show) => void;
   setScreen: (screen: "dashboard" | "library" | "creator" | "shows" | "play") => void;
 }
 
@@ -18,7 +19,7 @@ const findFirstGameInShow = (show: Show, games: Game[]): Game | null => {
   return null;
 };
 
-const ShowPlayer: React.FC<ShowPlayerProps> = ({ shows, games, onPlayGame, setScreen }) => {
+const ShowPlayer: React.FC<ShowPlayerProps> = ({ shows, games, onPlayGame, onStartShow, setScreen }) => {
   return (
     <div className="p-6 space-y-6">
       <header className="flex items-center justify-between">
@@ -67,15 +68,10 @@ const ShowPlayer: React.FC<ShowPlayerProps> = ({ shows, games, onPlayGame, setSc
                     {firstGame ? `Starts with: ${firstGame.name}` : "No games assigned"}
                   </span>
                   <button
-                    disabled={!firstGame}
-                    onClick={() => firstGame && onPlayGame(firstGame)}
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-                      firstGame
-                        ? "bg-brand-primary text-black hover:bg-brand-secondary"
-                        : "bg-base-300 text-text-secondary cursor-not-allowed"
-                    }`}
+                    onClick={() => onStartShow(show)}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-primary text-black hover:bg-brand-secondary"
                   >
-                    Play
+                    Play Show
                   </button>
                 </div>
               </div>

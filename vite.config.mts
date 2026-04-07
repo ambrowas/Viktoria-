@@ -17,6 +17,7 @@ export default defineConfig({
   },
   base: "./", // ensures sounds & assets resolve correctly in Electron
   server: {
+    host: true,
     port: 5173,
     strictPort: true,
   },

@@ -36,7 +36,7 @@ const MemoryEditor: React.FC<MemoryEditorProps> = ({ game, setGame }) => {
   const numPairs = Math.floor(numTiles / 2);
 
   const updateGame = (updates: Partial<MemoryGame>) => {
-    setGame((prev) => ({ ...prev, ...updates }));
+    setGame((prev: any) => ({ ...prev, ...updates }));
   };
 
   const handleGridSizeChange = (size: GridSize) => {
@@ -97,18 +97,49 @@ const MemoryEditor: React.FC<MemoryEditorProps> = ({ game, setGame }) => {
       const arrFiles = Array.from(files);
       const currGameId = game.id || crypto.randomUUID();
 
-      const readAsDataUrl = (file: File) =>
-        new Promise<string>((resolve, reject) => {
+      const compressImage = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
+          reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              const MAX_SIZE = 256;
+              let width = img.width;
+              let height = img.height;
+
+              if (width > height) {
+                if (width > MAX_SIZE) {
+                  height *= MAX_SIZE / width;
+                  width = MAX_SIZE;
+                }
+              } else {
+                if (height > MAX_SIZE) {
+                  width *= MAX_SIZE / height;
+                  height = MAX_SIZE;
+                }
+              }
+
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext("2d");
+              if (!ctx) return resolve(e.target?.result as string);
+              
+              ctx.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL("image/webp", 0.6));
+            };
+            img.onerror = reject;
+            img.src = e.target?.result as string;
+          };
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
+      };
 
       const uploadResults = await Promise.all(
         arrFiles.map(async (file) => {
           const matchId = crypto.randomUUID();
-          const url = await readAsDataUrl(file);
+          const url = await compressImage(file);
           return [
             { id: crypto.randomUUID(), matchId, content: url, sourceType: "UPLOAD" as const },
             { id: crypto.randomUUID(), matchId, content: url, sourceType: "UPLOAD" as const },

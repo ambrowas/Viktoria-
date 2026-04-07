@@ -13,6 +13,10 @@ import type { Game } from "@/types";
  */
 export async function getGames(): Promise<Game[]> {
   try {
+    if (!window.electronAPI) {
+      console.warn("getGames: electronAPI not found. Returning empty list.");
+      return [];
+    }
     // The main process reads all individual game files and returns them as an array.
     const games = await window.electronAPI.invoke("list-games-local");
     return Array.isArray(games) ? games : [];
@@ -34,6 +38,10 @@ export async function saveGame(game: Game): Promise<boolean> {
     return false;
   }
   try {
+    if (!window.electronAPI) {
+      console.warn("saveGame: electronAPI not found. Game save ignored.");
+      return false;
+    }
     return await window.electronAPI.invoke("save-game-local", {
       slug: game.slug,
       game,
@@ -55,6 +63,10 @@ export async function deleteGame(game: Pick<Game, "id" | "slug">): Promise<boole
     return false;
   }
   try {
+    if (!window.electronAPI) {
+      console.warn("deleteGame: electronAPI not found. Game delete ignored.");
+      return false;
+    }
     return await window.electronAPI.invoke("delete-game-local", {
       id: game.id,
       slug: game.slug,

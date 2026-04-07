@@ -19,12 +19,7 @@ import fireworks from "@/assets/animations/fireworks.json";
 import fire from "@/assets/animations/fire.json";
 import fallbackExplosion from "@/assets/animations/party.json";
 
-import { LotteryGame as LotteryGameType, LotteryDraw, LotteryTicket } from "@/types";
-
-interface Props {
-  game: LotteryGameType;
-  onExit: () => void;
-}
+import { LotteryGame as LotteryGameType, LotteryDraw, LotteryTicket, Team } from "@/types";
 
 // 🎲 Generate unique random lottery numbers
 const generateRandomNumbers = (count: number, max: number): number[] => {
@@ -51,7 +46,25 @@ const fadeOutSound = async (sound: any, duration = 800) => {
   }
 };
 
-const LotteryGame: React.FC<Props> = ({ game, onExit }) => {
+interface LotteryProps {
+  game: LotteryGameType;
+  teams: Team[];
+  teamScores: Record<string, number>;
+  onScoreChange: (teamId: string, score: number) => void;
+  onExit: (points?: Record<string, number>) => void;
+  hostControl?: "ipad" | "manual";
+  playerControl?: "ipad" | "manual";
+}
+
+const LotteryGame: React.FC<LotteryProps> = ({
+  game,
+  teams,
+  teamScores,
+  onScoreChange,
+  onExit,
+  hostControl = 'ipad',
+  playerControl = 'ipad'
+}) => {
   const [draw, setDraw] = useState<LotteryDraw | null>(game.draw || null);
   const [ticket, setTicket] = useState<LotteryTicket | null>(null);
   const [revealed, setRevealed] = useState<number[]>([]);
@@ -126,7 +139,9 @@ const LotteryGame: React.FC<Props> = ({ game, onExit }) => {
     await new Promise((r) => setTimeout(r, 1500));
 
     // ✅ Numeric match calculation
-    const matched = ticket.numbers.filter((n: number) => drawNums.includes(n)).length;
+    const matched = (ticket.numbers as (number | string)[]).filter((n) =>
+      drawNums.includes(Number(n))
+    ).length;
     setMatches(matched);
 
     // 🎚️ Dynamic fade duration
@@ -203,9 +218,8 @@ const LotteryGame: React.FC<Props> = ({ game, onExit }) => {
               return (
                 <motion.div
                   key={i}
-                  className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl ${
-                    revealedNow ? "bg-yellow-400 text-black" : "bg-gray-600 text-gray-400"
-                  }`}
+                  className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl ${revealedNow ? "bg-yellow-400 text-black" : "bg-gray-600 text-gray-400"
+                    }`}
                   initial={{ rotateY: 0 }}
                   animate={{ rotateY: revealedNow ? 360 : 0 }}
                   transition={{ duration: 0.6 }}
@@ -227,14 +241,13 @@ const LotteryGame: React.FC<Props> = ({ game, onExit }) => {
         <h2 className="text-lg font-semibold text-blue-400 mb-2">Your Ticket</h2>
         {ticket ? (
           <div className="flex justify-center gap-4 mb-4">
-            {ticket.numbers.map((num: number, i: number) => {
-              const isMatch = revealed.includes(num);
+            {ticket.numbers.map((num: string | number, i: number) => {
+              const isMatch = revealed.includes(Number(num));
               return (
                 <motion.div
                   key={i}
-                  className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl ${
-                    isMatch ? "bg-green-400 text-black scale-110" : "bg-gray-700 text-white"
-                  }`}
+                  className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl ${isMatch ? "bg-green-400 text-black scale-110" : "bg-gray-700 text-white"
+                    }`}
                   animate={{ scale: isMatch ? 1.2 : 1 }}
                   transition={{ duration: 0.3 }}
                 >
@@ -260,11 +273,10 @@ const LotteryGame: React.FC<Props> = ({ game, onExit }) => {
             <button
               onClick={handleStartDraw}
               disabled={isDrawing}
-              className={`${
-                isDrawing
-                  ? "bg-gray-500 cursor-not-allowed"
-                  : "bg-yellow-500 hover:bg-yellow-600 text-black"
-              } px-6 py-2 rounded-lg font-semibold`}
+              className={`${isDrawing
+                ? "bg-gray-500 cursor-not-allowed"
+                : "bg-yellow-500 hover:bg-yellow-600 text-black"
+                } px-6 py-2 rounded-lg font-semibold`}
             >
               {isDrawing ? "Drawing..." : "Start Draw"}
             </button>
@@ -276,15 +288,14 @@ const LotteryGame: React.FC<Props> = ({ game, onExit }) => {
       {isComplete && (
         <motion.div className="mt-10 text-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <h3
-            className={`text-3xl font-bold ${
-              matches >= 3 ? "text-green-400" : "text-gray-400"
-            }`}
+            className={`text-3xl font-bold ${matches >= 3 ? "text-green-400" : "text-gray-400"
+              }`}
           >
             {matches === 5
               ? "💎 JACKPOT! All 5 Numbers Matched!"
               : matches > 0
-              ? `You matched ${matches} ${matches === 1 ? "number" : "numbers"}!`
-              : "No matches this time – better luck next round!"}
+                ? `You matched ${matches} ${matches === 1 ? "number" : "numbers"}!`
+                : "No matches this time – better luck next round!"}
           </h3>
 
           {animation && (
@@ -296,7 +307,7 @@ const LotteryGame: React.FC<Props> = ({ game, onExit }) => {
       )}
 
       <button
-        onClick={onExit}
+        onClick={() => onExit()}
         className="mt-10 bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg"
       >
         Exit Game

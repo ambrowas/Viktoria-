@@ -170,6 +170,8 @@ export interface HangmanGame extends GameBase {
   phrases: HangmanPhrase[];
   difficulty: "Easy" | "Medium" | "Hard" | "Custom";
   maxAttempts: number;
+  hasTimeLimit?: boolean; // ✅ Added optional time limit toggle
+  timeLimit?: number;     // ✅ Added optional time limit in seconds
   language?: "en" | "es"; // ✅ Added optional language field
 }
 
@@ -320,6 +322,10 @@ export interface ShowSettings {
   playersPerTeam: number;
   totalRounds: number;
   notes?: string;
+  introMusic?: "viktoria" | "show_don_start";
+  hostControl?: "ipad" | "manual";
+  playerControl?: "ipad" | "manual";
+  language?: "en" | "es";
 }
 
 export interface ShowRound {

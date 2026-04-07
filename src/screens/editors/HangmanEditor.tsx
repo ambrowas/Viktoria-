@@ -121,7 +121,11 @@ const HangmanEditor: React.FC<HangmanEditorProps> = ({ game, setGame }) => {
   };
 
   const handleDifficultyChange = (difficulty: string) => {
-    updateGame({ difficulty: difficulty as HangmanGame["difficulty"] });
+    let defaults = {};
+    if (difficulty === "Easy") defaults = { maxAttempts: 10, hasTimeLimit: true, timeLimit: 120 };
+    if (difficulty === "Medium") defaults = { maxAttempts: 8, hasTimeLimit: true, timeLimit: 90 };
+    if (difficulty === "Hard") defaults = { maxAttempts: 6, hasTimeLimit: true, timeLimit: 60 };
+    updateGame({ difficulty: difficulty as HangmanGame["difficulty"], ...defaults });
   };
 
   const handleMaxAttemptsChange = (attempts: number) => {
@@ -150,7 +154,7 @@ const HangmanEditor: React.FC<HangmanEditorProps> = ({ game, setGame }) => {
       <div className="bg-base-200 p-6 rounded-lg shadow-lg">
         <h2 className="text-2xl font-bold mb-4">Configuración del Ahorcado</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 items-start">
           <div>
             <h3 className="text-lg font-semibold mb-2">Nivel de Dificultad</h3>
             <div className="flex gap-2">
@@ -160,13 +164,14 @@ const HangmanEditor: React.FC<HangmanEditorProps> = ({ game, setGame }) => {
                   onClick={() => handleDifficultyChange(level)}
                   className={`py-2 px-4 rounded-lg font-semibold ${game.difficulty === level
                     ? "bg-brand-primary text-white"
-                    : "bg-base-300"
+                    : "bg-base-300 hover:bg-base-200"
                     }`}
                 >
                   {level}
                 </button>
               ))}
             </div>
+            <p className="text-xs text-text-secondary mt-2">Autoconfigura intentos y tiempo.</p>
           </div>
 
           <div>
@@ -178,12 +183,40 @@ const HangmanEditor: React.FC<HangmanEditorProps> = ({ game, setGame }) => {
                   onClick={() => handleMaxAttemptsChange(attempts)}
                   className={`py-2 px-4 rounded-lg font-semibold ${game.maxAttempts === attempts
                     ? "bg-brand-primary text-white"
-                    : "bg-base-300"
+                    : "bg-base-300 hover:bg-base-200"
                     }`}
                 >
                   {attempts}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-semibold mb-2">Límite de Tiempo</h3>
+            <div className="flex flex-col gap-3">
+              <label className="flex items-center cursor-pointer bg-base-300 w-max px-4 py-2 rounded-lg">
+                <span className="mr-3 font-semibold">Temporizador</span>
+                <input
+                  type="checkbox"
+                  className="toggle toggle-primary"
+                  checked={!!game.hasTimeLimit}
+                  onChange={(e) => updateGame({ hasTimeLimit: e.target.checked })}
+                />
+              </label>
+              
+              {game.hasTimeLimit && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">Duración:</span>
+                  <input 
+                    type="number" 
+                    value={game.timeLimit || 90} 
+                    onChange={(e) => updateGame({ timeLimit: parseInt(e.target.value) || 90 })}
+                    className="w-20 p-2 rounded-lg bg-base-300 text-center font-bold outline-none ring-2 ring-brand-primary"
+                  />
+                  <span className="text-sm font-semibold text-text-secondary">segs</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

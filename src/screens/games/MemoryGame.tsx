@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { correctSound, wrongSound, timerSound } from "@/utils/sound";
+import { useSync } from "@/context/SyncContext";
 
 interface MemoryTile {
   id: string;
@@ -19,24 +20,96 @@ interface MemoryGameProps {
 
 const MemoryGame: React.FC<MemoryGameProps> = ({ tiles, gridSize, onExit }) => {
   const [cards, setCards] = useState<
-    Array<MemoryTile & { flipped: boolean; matched: boolean }>
+    Array<MemoryTile & { flipped: boolean; matched: boolean; originalIndex: number }>
   >([]);
   const [flippedCards, setFlippedCards] = useState<typeof cards>([]);
   const [moves, setMoves] = useState(0);
   const [matches, setMatches] = useState(0);
   const [timeLeft, setTimeLeft] = useState(120);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isHoveringGrid, setIsHoveringGrid] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [dimensions, setDimensions] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  const [pendingRemoteClick, setPendingRemoteClick] = useState<number | null>(null);
+
+  const { sessionData, isRemoteMode, updateSession } = useSync();
+  const lastCommandRef = useRef<number>(Date.now());
+
+  // 📡 Broadcast game state to Host
+  useEffect(() => {
+    if (!isRemoteMode) return;
+    updateSession({
+      flippedIndices: cards.map((c, i) => c.flipped || c.matched ? i : -1).filter(i => i !== -1),
+      matchedPairs: cards.filter(c => c.matched).map(c => c.matchId),
+      shuffledIndices: cards.map(c => c.originalIndex)
+    } as any);
+  }, [cards, isRemoteMode, updateSession]);
+
+  // 🎧 Listen for Host Commands
+  useEffect(() => {
+    if (!isRemoteMode || !sessionData?.hostCommand) return;
+    const cmd = sessionData.hostCommand as any;
+    
+    const ts = cmd.timestamp || 0;
+    if (ts > 0 && ts <= lastCommandRef.current) return;
+    if (ts > 0) lastCommandRef.current = ts;
+
+    if (cmd.type === 'memory_reset' || cmd.type === 'memory_shuffle') {
+      setFlippedCards([]);
+      if (cmd.type === 'memory_reset') {
+        setMoves(0);
+        setMatches(0);
+        setTimeLeft(120);
+      }
+      setCards(prev => {
+        const next = cmd.type === 'memory_reset' 
+            ? prev.map(c => ({ ...c, flipped: false, matched: false }))
+            : [...prev];
+
+        for (let i = next.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [next[i], next[j]] = [next[j], next[i]];
+        }
+        return next;
+      });
+    }
+
+    if (cmd.type === 'memory_reveal_all') {
+      setCards(prev => prev.map(c => ({ ...c, flipped: true })));
+    }
+
+    if (cmd.type === 'memory_force_flip') {
+       const index = cmd.payload?.index;
+       if (typeof index === 'number') {
+           setPendingRemoteClick(index);
+       }
+    }
+  }, [sessionData?.hostCommand, isRemoteMode]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Shuffle & initialize cards
   useEffect(() => {
     if (tiles && tiles.length > 0) {
-      const shuffled = [...tiles];
-      for (let i = shuffled.length - 1; i > 0; i--) {
+      // Create objects with their original index to guarantee perfect syncing
+      const deck = tiles.map((t, index) => ({ ...t, flipped: false, matched: false, originalIndex: index }));
+      for (let i = deck.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        [deck[i], deck[j]] = [deck[j], deck[i]];
       }
-      setCards(shuffled.map((t) => ({ ...t, flipped: false, matched: false })));
+      setCards(deck);
     }
   }, [tiles]);
 
@@ -61,6 +134,20 @@ const MemoryGame: React.FC<MemoryGameProps> = ({ tiles, gridSize, onExit }) => {
       }
     };
   }, [cards]);
+
+  // Execute remote clicks using fresh state closures via useEffect
+  useEffect(() => {
+    if (pendingRemoteClick !== null) {
+      console.log("[MemoryGame] Remote click received for index:", pendingRemoteClick);
+      console.log("[MemoryGame] Card at index:", cards[pendingRemoteClick]);
+      if (cards[pendingRemoteClick]) {
+          handleCardClick(cards[pendingRemoteClick]);
+      } else {
+          console.warn("[MemoryGame] No card found at index", pendingRemoteClick);
+      }
+      setPendingRemoteClick(null);
+    }
+  }, [pendingRemoteClick, cards]);
 
   useEffect(() => {
     if (timeLeft === 0 || allMatched) {
@@ -140,16 +227,28 @@ const MemoryGame: React.FC<MemoryGameProps> = ({ tiles, gridSize, onExit }) => {
   const { cols, rows } = getGridDimensions(gridSize);
   const allMatched = cards.length > 0 && cards.every((c) => c.matched);
 
-  // Scale cards to fit
-  const cardSize = Math.min(
-    Math.floor(window.innerWidth / (cols * 2)),
-    Math.floor(window.innerHeight / (rows * 2.2))
+  // Scale cards to fit (accounting for gaps and padding mathematically)
+  // Maximize the usage of space.
+  const GAP_SIZE = 16;
+  const PADDING_WIDTH = 120; // 64 for outer padding/border, 56 safe edge
+  const PADDING_HEIGHT = 160; // Extra room for the top stats bar and paddings
+  
+  const cardSize = Math.max(
+    80,
+    Math.min(
+      Math.floor((dimensions.width - PADDING_WIDTH - (cols - 1) * GAP_SIZE) / cols),
+      Math.floor((dimensions.height - PADDING_HEIGHT - (rows - 1) * GAP_SIZE) / rows)
+    )
   );
 
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-indigo-900 to-purple-900 flex flex-col items-center justify-center z-50 p-6">
       {/* Stats bar */}
-      <div className="flex justify-center items-center gap-8 mb-6 text-white text-xl font-bold">
+      <div 
+        className={`flex justify-center items-center gap-8 mb-6 text-white text-xl font-bold transition-opacity duration-300 ${
+          isHoveringGrid ? "opacity-0 pointer-events-none" : "opacity-100"
+        }`}
+      >
         <span className="bg-blue-800 px-4 py-2 rounded-lg shadow-md">
           Moves: {moves} | Matches: {matches}/{cards.length / 2}
         </span>
@@ -185,6 +284,8 @@ const MemoryGame: React.FC<MemoryGameProps> = ({ tiles, gridSize, onExit }) => {
           gridTemplateColumns: `repeat(${cols}, ${cardSize}px)`,
           gridTemplateRows: `repeat(${rows}, ${cardSize}px)`,
         }}
+        onMouseEnter={() => setIsHoveringGrid(true)}
+        onMouseLeave={() => setIsHoveringGrid(false)}
       >
         {cards.map((card, i) => (
           <motion.div

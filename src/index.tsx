@@ -3,6 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { LanguageProvider } from '@/context/LanguageContext';
+import { SyncProvider } from '@/context/SyncContext';
 import './index.css';
 
 const rootElement = document.getElementById('root');
@@ -14,7 +15,9 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <LanguageProvider>
-      <App />
+      <SyncProvider>
+        <App />
+      </SyncProvider>
     </LanguageProvider>
   </React.StrictMode>
 );
