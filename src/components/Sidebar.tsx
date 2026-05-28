@@ -132,14 +132,17 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, setScreen }) => {
           className="w-[240px] opacity-90 [transform-style:preserve-3d]"
         >
           <motion.div
-            className="absolute inset-0 rounded-full blur-2xl"
-            animate={{
-              backgroundColor: isHovered
-                ? "rgba(255,255,255,0.25)"
-                : "rgba(0,0,0,0.25)",
+            className="absolute inset-0 rounded-full bg-gradient-to-tr from-violet-600 via-pink-500 to-amber-400 blur-2xl pointer-events-none"
+            animate={{ 
+              rotate: 360,
               scale: isHovered ? 1.3 : 1,
+              opacity: isHovered ? 0.35 : 0.2
             }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
+            transition={{ 
+              rotate: { duration: 10, repeat: Infinity, ease: "linear" },
+              scale: { duration: 0.5, ease: "easeOut" },
+              opacity: { duration: 0.5, ease: "easeOut" }
+            }}
           />
           <Lottie
             animationData={puzzleAnimation}
@@ -147,8 +150,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, setScreen }) => {
             autoplay
             style={{
               filter: isHovered
-                ? "drop-shadow(0 0 14px rgba(255,255,255,0.5))"
-                : "drop-shadow(0 0 10px rgba(0,0,0,0.25))",
+                ? "drop-shadow(0 0 12px rgba(255, 255, 255, 0.15))"
+                : "none",
             }}
           />
         </motion.div>

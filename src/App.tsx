@@ -1,5 +1,8 @@
 import React, { useState, useCallback, useEffect } from "react";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getFirestore, collection, getDocs, query, orderBy } from "firebase/firestore";
 import type { Game, Screen, Show, Team } from "@/types";
+import { GameType } from "@/types";
 import { flipSound, transitionSound, magicalSound, stopAllSounds } from "@/utils/sound";
 import useLocalStorage from "@hooks/useLocalStorage";
 import Sidebar from "@components/Sidebar";
@@ -13,13 +16,17 @@ import ShowRunner from "@screens/ShowRunner";
 import PlayerInterface from "@screens/PlayerInterface";
 import MasterControlPanel from "@screens/host/MasterControlPanel";
 import HostAdaptiveFactory from "@screens/host/HostAdaptiveFactory";
+import ShowHostController from "@screens/host/ShowHostController";
 import QuickPlayWrapper from "@components/QuickPlayWrapper";
 import Modal from "@components/Modal";
 import { getGames, saveGame, deleteGame } from "@services/localGameService";
+import { getShows, saveShow, deleteShow } from "@services/localShowService";
 import { useLanguage } from "@/context/LanguageContext";
 import { useSync } from "@/context/SyncContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wifi, WifiOff, Settings, X, Shield, Gamepad2 } from "lucide-react";
+import { Wifi, WifiOff, Settings, X, Shield, Gamepad2, Monitor } from "lucide-react";
+import Lottie from "lottie-react";
+import puzzleAnimation from "@/assets/animations/puzzle.json";
 
 const TRANSLATIONS = {
   en: {
@@ -42,12 +49,15 @@ const App: React.FC = () => {
   // ==============================================================
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [games, setGames] = useState<Game[]>([]);
-  const [shows, setShows] = useLocalStorage<Show[]>("gameshow-shows", []);
+  const [isLoadingGames, setIsLoadingGames] = useState(true);
+  const [shows, setShows] = useState<Show[]>([]);
+  const [isLoadingShows, setIsLoadingShows] = useState(true);
   const [editingGame, setEditingGame] = useState<Game | null>(null);
   const [gameIdToDelete, setGameIdToDelete] = useState<string | null>(null);
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [activeQuickPlay, setActiveQuickPlay] = useState<{ game: Game; teams: Team[] } | null>(null);
   const [activeShow, setActiveShow] = useState<Show | null>(null);
+  const [activeShowInitialState, setActiveShowInitialState] = useState<any | null>(null);
   const [isDark, setIsDark] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionLabel, setTransitionLabel] = useState("");
@@ -68,6 +78,89 @@ const App: React.FC = () => {
     version,
     syncStatus
   } = useSync();
+
+  const [isDualScreenActive, setIsDualScreenActive] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('localSync') === 'true') return false;
+    return localStorage.getItem('viktoria_isDualScreen') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('viktoria_isDualScreen', isDualScreenActive ? 'true' : 'false');
+  }, [isDualScreenActive]);
+
+  useEffect(() => {
+    if (window.electronAPI) {
+      (window.electronAPI as any).on("viewer-window-closed", () => {
+        console.log("App: Viewer window was closed by the user.");
+        setIsDualScreenActive(false);
+        setDeviceRole("viewer");
+        leaveSession();
+      });
+    }
+  }, [leaveSession, setDeviceRole]);
+
+  // Sync active game/show on local sync viewer window
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isLocalSyncViewer = deviceRole === 'viewer' && params.get('localSync') === 'true';
+    
+    if (isLocalSyncViewer && sessionData) {
+      // Sync active show
+      if (sessionData.currentShowId) {
+        if (!activeShow || activeShow.id !== sessionData.currentShowId) {
+          setActiveShow(sessionData.fullShowData || null);
+        }
+      } else {
+        if (activeShow) setActiveShow(null);
+      }
+
+      // Sync active game
+      if (sessionData.currentGameId && !sessionData.currentShowId) {
+        if (!activeGame || activeGame.id !== sessionData.currentGameId) {
+          setActiveGame(sessionData.fullGameData || null);
+        }
+      } else {
+        if (activeGame) setActiveGame(null);
+      }
+    }
+  }, [deviceRole, sessionData, activeShow, activeGame]);
+
+  const handleToggleDualScreen = async () => {
+    if (isDualScreenActive) {
+      setIsDualScreenActive(false);
+      setDeviceRole("viewer");
+      leaveSession();
+      if (window.electronAPI) {
+        await window.electronAPI.invoke("close-viewer-window");
+      }
+    } else {
+      setIsDualScreenActive(true);
+      setDeviceRole("host");
+      
+      const localSessionId = "LOCAL";
+      localStorage.setItem('viktoria_sessionId', localSessionId);
+      joinSession(localSessionId, "host");
+      
+      if (window.electronAPI) {
+        await window.electronAPI.invoke("open-viewer-window", "/?role=viewer&localSync=true");
+        
+        // Broadcast current active states if any exist
+        setTimeout(() => {
+          updateSession({
+            currentShowId: activeShow?.id || null,
+            fullShowData: activeShow || null,
+            currentGameId: activeGame?.id || null,
+            fullGameData: activeGame || null,
+            teams: activeShow?.teams || (activeGame as any)?.teams || [],
+            teamScores: activeShow
+              ? Object.fromEntries(activeShow.teams.map((t) => [t.id, 0]))
+              : {},
+          });
+        }, 800);
+      }
+    }
+  };
 
   const lastAppCommandTimestamp = React.useRef<number>(Date.now());
 
@@ -186,33 +279,148 @@ const App: React.FC = () => {
   // ==============================================================
 
   const fetchGames = useCallback(async () => {
+    setIsLoadingGames(true);
     try {
       const localGames = await getGames();
-      setGames(localGames);
-    } catch (error) {
-      console.error("Failed to load games:", error);
-      alert(lang === "es" ? "Error al cargar los juegos locales." : "Error loading local games.");
+
+      // MIGRATION: Restore legacy games from localStorage & Firestore
+      try {
+        let migratedAny = false;
+
+        // 1. Recover from Local Storage (most likely location for recent games)
+        const legacyGamesJson = window.localStorage.getItem("gameshow-games");
+        if (legacyGamesJson) {
+          const legacyGames = JSON.parse(legacyGamesJson) as Game[];
+          for (const lg of legacyGames) {
+            if (!localGames.some((g) => g.id === lg.id)) {
+              await saveGame(lg);
+              migratedAny = true;
+            }
+          }
+          if (migratedAny) {
+             console.log("✅ Recovered games from LocalStorage!");
+          }
+        }
+
+        // 2. Recover from Firebase Firestore (older games) - ONLY ONCE
+        const hasMigratedFirestore = window.localStorage.getItem("viktoria-firestore-migrated") === "true";
+        if (!hasMigratedFirestore) {
+          try {
+            const firebaseConfig = {
+              apiKey: "AIzaSyCfNNcIK2WR3ONNnlEDvolCw4Fn4-uheD0",
+              authDomain: "viktoria-226cf.firebaseapp.com",
+              projectId: "viktoria-226cf",
+            };
+            const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+            const db = getFirestore(app);
+            const q = query(collection(db, "games"), orderBy("createdAt", "desc"));
+            const snap = await getDocs(q);
+            
+            for (const docSnap of snap.docs) {
+              const raw = docSnap.data();
+              const id = docSnap.id;
+              if (!localGames.some((g) => g.id === id)) {
+                const lg = raw as Game;
+                lg.id = id;
+                lg.slug = lg.slug || lg.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "") || id;
+                await saveGame(lg);
+                migratedAny = true;
+              }
+            }
+            if (snap.docs.length > 0) {
+               console.log("✅ Checked Firestore for legacy games.");
+            }
+            window.localStorage.setItem("viktoria-firestore-migrated", "true");
+          } catch (e) {
+            console.error("Firestore migration skipped or failed:", e);
+          }
+        }
+
+      if (migratedAny) {
+         const refreshedGames = await getGames();
+         setGames(refreshedGames);
+         setIsLoadingGames(false);
+         return;
+      }
+    } catch (err) {
+      console.error("Migration failed:", err);
     }
-  }, [lang]);
+
+    setGames(localGames);
+  } catch (error) {
+    console.error("Failed to load games:", error);
+    alert(lang === "es" ? "Error al cargar los juegos locales." : "Error loading local games.");
+  } finally {
+    setIsLoadingGames(false);
+  }
+}, [lang]);
 
   useEffect(() => {
     fetchGames();
   }, [fetchGames]);
 
+  const fetchShows = useCallback(async () => {
+    setIsLoadingShows(true);
+    try {
+      const localShows = await getShows();
+
+      // MIGRATION: Restore legacy shows from localStorage
+      try {
+        let migratedAny = false;
+        const legacyShowsJson = window.localStorage.getItem("gameshow-shows");
+        if (legacyShowsJson) {
+          const legacyShows = JSON.parse(legacyShowsJson) as Show[];
+          for (const ls of legacyShows) {
+            if (!localShows.some((s) => s.id === ls.id)) {
+              await saveShow(ls);
+              migratedAny = true;
+            }
+          }
+          if (migratedAny) {
+             console.log("✅ Recovered shows from LocalStorage!");
+          }
+        }
+
+        if (migratedAny) {
+          const refreshedShows = await getShows();
+          setShows(refreshedShows);
+          setIsLoadingShows(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Show migration failed:", err);
+      }
+
+      setShows(localShows);
+    } catch (error) {
+      console.error("Failed to load shows:", error);
+    } finally {
+      setIsLoadingShows(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchShows();
+  }, [fetchShows]);
+
   const handleSaveGame = useCallback(
-    async (gameToSave: Game): Promise<void> => {
+    async (gameToSave: Game, silent?: boolean): Promise<void> => {
       try {
         const success = await saveGame(gameToSave);
         if (success) {
           await fetchGames(); // Refresh the list from the source of truth
-          setEditingGame(null);
-          setScreen("library");
+          if (!silent) {
+            setEditingGame(null);
+            setScreen("library");
+          }
         } else {
           throw new Error("Save operation returned false.");
         }
       } catch (error) {
         console.error("Save failed:", error);
-        alert(lang === "es" ? "No se pudo guardar el juego localmente." : "Could not save the game locally.");
+        if (!silent) {
+          alert(lang === "es" ? "No se pudo guardar el juego localmente." : "Could not save the game locally.");
+        }
       }
     },
     [fetchGames, lang]
@@ -248,27 +456,42 @@ const App: React.FC = () => {
 
   const handleSaveShow = useCallback(
     async (showToSave: Show): Promise<void> => {
-      setShows((prev) => {
-        const exists = prev.some((show) => show.id === showToSave.id);
+      try {
         const normalized: Show = {
           ...showToSave,
           id: showToSave.id || crypto.randomUUID(),
           createdAt: showToSave.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        return exists
-          ? prev.map((show) => (show.id === normalized.id ? normalized : show))
-          : [...prev, normalized];
-      });
+        const success = await saveShow(normalized);
+        if (success) {
+          await fetchShows();
+        } else {
+          throw new Error("Save show operation returned false.");
+        }
+      } catch (error) {
+        console.error("Save show failed:", error);
+        alert(lang === "es" ? "No se pudo guardar el show localmente." : "Could not save the show locally.");
+      }
     },
-    [setShows]
+    [fetchShows, lang]
   );
 
   const handleDeleteShow = useCallback(
     async (showId: string): Promise<void> => {
-      setShows((prev) => prev.filter((show) => show.id !== showId));
+      try {
+        const success = await deleteShow(showId);
+        if (success) {
+          await fetchShows();
+        } else {
+          throw new Error("Delete show operation returned false.");
+        }
+      } catch (error) {
+        console.error("Delete show failed:", error);
+        alert(lang === "es" ? "No se pudo eliminar el show localmente." : "Could not delete the show locally.");
+      }
     },
-    [setShows]
+    [fetchShows, lang]
   );
 
   // ==============================================================
@@ -278,8 +501,10 @@ const App: React.FC = () => {
     const label = lang === "es" ? TRANSLATIONS.es.gameStarting : TRANSLATIONS.en.gameStarting;
     setTransitionLabel(label);
     setIsTransitioning(true);
-    transitionSound.play();
-    magicalSound.play();
+    if (g.type !== GameType.SMART_AZZ) {
+      transitionSound.play();
+      magicalSound.play();
+    }
 
     setTimeout(() => {
       setActiveGame(g);
@@ -309,8 +534,10 @@ const App: React.FC = () => {
     const label = lang === "es" ? TRANSLATIONS.es.gameStarting : TRANSLATIONS.en.gameStarting;
     setTransitionLabel(label);
     setIsTransitioning(true);
-    transitionSound.play();
-    magicalSound.play();
+    if (g.type !== GameType.SMART_AZZ) {
+      transitionSound.play();
+      magicalSound.play();
+    }
 
     setTimeout(() => {
       setActiveQuickPlay({ game: g, teams });
@@ -336,7 +563,7 @@ const App: React.FC = () => {
     }, 1200);
   };
 
-  const handleStartShow = (s: Show) => {
+  const handleStartShow = (s: Show, initialState?: any) => {
     const label = lang === "es" ? TRANSLATIONS.es.showStarting : TRANSLATIONS.en.showStarting;
     setTransitionLabel(label);
     setIsTransitioning(true);
@@ -344,6 +571,7 @@ const App: React.FC = () => {
     magicalSound.play();
 
     setTimeout(() => {
+      setActiveShowInitialState(initialState || null);
       setActiveShow(s);
       setIsTransitioning(false);
     }, 1500);
@@ -358,6 +586,7 @@ const App: React.FC = () => {
 
     setTimeout(() => {
       setActiveShow(null);
+      setActiveShowInitialState(null);
       setScreen("library");
       setIsTransitioning(false);
       if (isRemoteMode) {
@@ -370,6 +599,63 @@ const App: React.FC = () => {
   // RENDER SCREEN
   // ==============================================================
   const renderScreen = (): JSX.Element | null => {
+    const params = new URLSearchParams(window.location.search);
+    const isLocalSyncViewer = params.get('localSync') === 'true';
+
+    if (isLocalSyncViewer && !activeGame && !activeShow) {
+      return (
+        <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#0a0f1d] text-white p-8 relative overflow-hidden select-none">
+          {/* Decorative background grid and glow */}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(49,130,206,0.1)_0%,transparent_70%)] animate-pulse pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
+          
+          {/* Floating Puzzle Lottie Animation */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{
+              opacity: 1,
+              y: [0, -12, 0],
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              repeatType: "mirror",
+              ease: "easeInOut",
+            }}
+            className="w-[220px] mb-8 relative"
+          >
+            <motion.div
+              className="absolute inset-0 rounded-full bg-gradient-to-tr from-violet-600 via-pink-500 to-amber-400 blur-3xl pointer-events-none"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+              style={{ opacity: 0.25 }}
+            />
+            <Lottie
+              animationData={puzzleAnimation}
+              loop
+              autoplay
+              style={{
+                filter: "drop-shadow(0 0 12px rgba(255, 255, 255, 0.15))"
+              }}
+            />
+          </motion.div>
+
+          {/* Casing matches branding "QuizBoard" */}
+          <h1 className="text-4xl font-extrabold tracking-tight text-white mb-2 font-display bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-400">
+            Viktoria GameShow
+          </h1>
+          <p className="text-blue-400/80 font-semibold tracking-widest text-xs uppercase mb-8">
+            QuizBoard Presentation Screen
+          </p>
+
+          <div className="flex items-center gap-3 px-4 py-2 bg-blue-500/10 border border-blue-500/20 rounded-full text-xs font-medium text-blue-300">
+            <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+            <span>{lang === "es" ? "Esperando al anfitrión..." : "Waiting for Host..."}</span>
+          </div>
+        </div>
+      );
+    }
+
     // 📱 Support Host Role (iPad)
     if (deviceRole === 'host') {
       // If we are on the PC, we ONLY want to render HostAdaptiveFactory 
@@ -428,13 +714,17 @@ const App: React.FC = () => {
           </div>
         );
       } else {
+        const showData = sessionData?.fullShowData as Show;
+        const currentStep = sessionData?.currentStep;
         const gameToController = activeGame || (sessionData?.fullGameData as Game);
 
         try {
           return (
             <div className="h-screen flex flex-col bg-[#0a0a0a] text-white overflow-hidden">
               <MasterControlPanel />
-              {gameToController ? (
+              {showData && currentStep && currentStep !== 'playing' ? (
+                <ShowHostController show={showData} />
+              ) : gameToController ? (
                 <HostAdaptiveFactory currentGame={gameToController} />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-slate-500 font-mono text-xs gap-4 p-8 text-center bg-[#0a0a0a]">
@@ -493,6 +783,7 @@ const App: React.FC = () => {
           show={activeShow}
           games={games}
           onExit={handleExitShow}
+          initialState={activeShowInitialState || undefined}
         />
       );
     }
@@ -518,7 +809,10 @@ const App: React.FC = () => {
             isDark={isDark}
             toggleTheme={toggleTheme}
             setScreen={setScreen}
-            startNewGame={() => setScreen("creator")}
+            startNewGame={() => {
+              setEditingGame(null);
+              setScreen("creator");
+            }}
           />
         );
 
@@ -526,11 +820,15 @@ const App: React.FC = () => {
         return (
           <GameLibrary
             games={games}
+            isLoading={isLoadingGames}
             onPlay={handlePlayGame}
             onQuickPlay={handleQuickPlay}
             onEdit={handleEditGame}
             onDelete={setGameIdToDelete}
-            onCreateNew={() => setScreen("creator")}
+            onCreateNew={() => {
+              setEditingGame(null);
+              setScreen("creator");
+            }}
           />
         );
 
@@ -571,7 +869,10 @@ const App: React.FC = () => {
             isDark={isDark}
             toggleTheme={toggleTheme}
             setScreen={setScreen}
-            startNewGame={() => setScreen("creator")}
+            startNewGame={() => {
+              setEditingGame(null);
+              setScreen("creator");
+            }}
           />
         );
     }
@@ -585,31 +886,54 @@ const App: React.FC = () => {
       className={`${isDark ? "dark" : ""} flex h-screen bg-gradient-to-b from-[#0a0a0a] to-[#111827] text-text-primary transition-all duration-700 ${activeGame || activeQuickPlay ? "overflow-hidden" : ""
         }`}
     >
-      {/* 🟦 Sidebar — Hidden During Active Game or Host Mode */}
-      {!activeGame && !activeQuickPlay && !activeShow && !isTransitioning && deviceRole === 'viewer' && (
+      {/* 🟦 Sidebar — Hidden During Active Game, Host Mode, or Dual Screen TV Window */}
+      {!activeGame && !activeQuickPlay && !activeShow && !isTransitioning && (deviceRole === 'viewer' || (deviceRole === 'host' && window.electronAPI)) && !window.location.search.includes("localSync=true") && (
         <aside className="transition-opacity duration-700 ease-in-out">
-          <Sidebar currentScreen={screen} setScreen={setScreen} />
+          <Sidebar 
+             currentScreen={screen} 
+             setScreen={(s) => {
+               if (s === "creator" && screen !== "creator") {
+                 setEditingGame(null);
+               }
+               setScreen(s);
+             }} 
+          />
         </aside>
       )}
 
       {/* 🎮 Main Area */}
       <main
-        className={`flex-1 transition-all duration-700 relative ${activeGame || activeQuickPlay || activeShow || deviceRole !== 'viewer' ? "p-0" : "overflow-y-auto p-4 sm:p-6 md:p-8"
+        className={`flex-1 transition-all duration-700 relative ${activeGame || activeQuickPlay || activeShow || (deviceRole !== 'viewer' && !window.electronAPI) ? "p-0 h-full flex flex-col min-h-0" : "overflow-y-auto p-4 sm:p-6 md:p-8"
           }`}
       >
-        {/* 📡 Sync Status Indicator (Floating) */}
+        {/* 📡 Sync Status & Dual Screen Indicators (Floating) */}
         {!isTransitioning && (
           <div className="absolute top-4 right-4 z-[100] flex items-center gap-2">
-            <button
-              onClick={() => setShowSyncModal(true)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-lg ${isRemoteMode
-                ? "bg-green-500/20 text-green-400 border border-green-500/50"
-                : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700"
-                }`}
-            >
-              {isRemoteMode ? <Wifi size={14} /> : <WifiOff size={14} />}
-              {isRemoteMode ? `SESSION: ${sessionId}` : (lang === 'es' ? 'SINCRONIZAR' : 'SYNC')}
-            </button>
+            {window.electronAPI && !window.location.search.includes("localSync=true") && (
+              <button
+                onClick={handleToggleDualScreen}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-lg ${isDualScreenActive
+                  ? "bg-blue-500/20 text-blue-400 border border-blue-500/50"
+                  : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700"
+                  }`}
+              >
+                <Monitor size={14} />
+                {isDualScreenActive ? (lang === 'es' ? 'PANTALLA DUAL: ACTIVO' : 'DUAL SCREEN: ACTIVE') : (lang === 'es' ? 'PANTALLA DUAL' : 'DUAL SCREEN')}
+              </button>
+            )}
+
+            {!isDualScreenActive && (
+              <button
+                onClick={() => setShowSyncModal(true)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-lg ${isRemoteMode
+                  ? "bg-green-500/20 text-green-400 border border-green-500/50"
+                  : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700"
+                  }`}
+              >
+                {isRemoteMode ? <Wifi size={14} /> : <WifiOff size={14} />}
+                {isRemoteMode ? `SESSION: ${sessionId}` : (lang === 'es' ? 'SINCRONIZAR' : 'SYNC')}
+              </button>
+            )}
           </div>
         )}
 
