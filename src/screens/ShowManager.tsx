@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import type { Game, Player, Show, ShowRound, ShowMediaItem, Team } from "@/types";
+import type { Game, Player, Show, ShowRound, Team } from "@/types";
 import { GameType } from "@/types";
 import { X, GripVertical } from "lucide-react";
 import TeamIcon from "@/components/TeamIcon";
@@ -12,9 +12,9 @@ interface ShowManagerProps {
   onDeleteShow: (showId: string) => Promise<void>;
 }
 
-type WizardStep = 0 | 1 | 2 | 3 | 4;
+type WizardStep = 0 | 1 | 2 | 3;
 
-const STEP_LABELS = ["Basics", "Teams", "Rounds", "Ending & Credits", "Review"] as const;
+const STEP_LABELS = ["Basics", "Teams", "Rounds", "Review"] as const;
 const TEAM_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#f97316", "#14b8a6"];
 const TEAM_ICONS = ["flame", "zap", "star", "brain", "rocket", "target", "music", "gamepad", "trophy", "crown"];
 const GAME_TYPE_FILTERS: Array<"ALL" | GameType> = ["ALL", ...Object.values(GameType)] as Array<
@@ -28,16 +28,8 @@ const DEFAULT_SETTINGS = {
   notes: "",
   introMusic: "viktoria" as const,
   language: "es" as const,
-  hostControl: "manual" as const,
-  playerControl: "manual" as const,
-  location: "",
-  winnerTitle: "",
-  thankYouMessage: "",
-  organizers: [
-    { id: "default-org-1", role: "Executive Producer", name: "Viktoria Game Show Team" },
-    { id: "default-org-2", role: "Game Master & Host", name: "Nidmyake Mwakalyeye" },
-    { id: "default-org-3", role: "Technical Director", name: "Antigravity AI Engineers" }
-  ],
+  hostControl: "ipad" as const,
+  playerControl: "ipad" as const,
 };
 
 const uuid = () => crypto.randomUUID();
@@ -75,9 +67,6 @@ const createEmptyShow = (): Show => ({
     createTeam(index, DEFAULT_SETTINGS.playersPerTeam)
   ),
   rounds: Array.from({ length: DEFAULT_SETTINGS.totalRounds }, (_, index) => createRound(index)),
-  sponsors: [],
-  assets: [],
-  themeImage: "",
 });
 
 const ensureTeams = (teams: Team[], numTeams: number, playersPerTeam: number): Team[] => {
@@ -150,13 +139,9 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
         settings: {
           ...DEFAULT_SETTINGS,
           ...selectedShow.settings,
-          organizers: selectedShow.settings?.organizers || DEFAULT_SETTINGS.organizers,
         },
         teams: sanitizedTeams,
         rounds: sanitizedRounds,
-        sponsors: selectedShow.sponsors || [],
-        assets: selectedShow.assets || [],
-        themeImage: selectedShow.themeImage || "",
       };
       setShowDraft(hydrated);
       setStep(0);
@@ -442,7 +427,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
   };
 
   const goToStep = (value: WizardStep) => setStep(value);
-  const goNext = () => setStep(Math.min(4, (step + 1)) as WizardStep);
+  const goNext = () => setStep(Math.min(3, (step + 1)) as WizardStep);
   const goBack = () => setStep(Math.max(0, (step - 1)) as WizardStep);
 
   const currentStepValid = useMemo(() => {
@@ -458,321 +443,137 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
       case 2:
         return showDraft.rounds.every((round) => round.name.trim().length > 0);
       case 3:
-      case 4:
       default:
         return true;
     }
   }, [step, showDraft]);
 
-  const renderBasicsStep = () => {
-    const addSponsorInBasics = () => {
-      const newSponsor = { id: uuid(), url: "", size: "medium" as const };
-      setShowDraft(prev => ({
-        ...prev,
-        sponsors: [...(prev.sponsors || []), newSponsor]
-      }));
-    };
-
-    const updateSponsorInBasics = (id: string, updates: Partial<ShowMediaItem>) => {
-      setShowDraft(prev => ({
-        ...prev,
-        sponsors: (prev.sponsors || []).map(s => s.id === id ? { ...s, ...updates } : s)
-      }));
-    };
-
-    const removeSponsorInBasics = (id: string) => {
-      setShowDraft(prev => ({
-        ...prev,
-        sponsors: (prev.sponsors || []).filter(s => s.id !== id)
-      }));
-    };
-
-    const addAssetInBasics = () => {
-      const newAsset = { id: uuid(), url: "", size: "medium" as const };
-      setShowDraft(prev => ({
-        ...prev,
-        assets: [...(prev.assets || []), newAsset]
-      }));
-    };
-
-    const updateAssetInBasics = (id: string, updates: Partial<ShowMediaItem>) => {
-      setShowDraft(prev => ({
-        ...prev,
-        assets: (prev.assets || []).map(a => a.id === id ? { ...a, ...updates } : a)
-      }));
-    };
-
-    const removeAssetInBasics = (id: string) => {
-      setShowDraft(prev => ({
-        ...prev,
-        assets: (prev.assets || []).filter(a => a.id !== id)
-      }));
-    };
-
-    return (
-      <div className="space-y-6">
+  const renderBasicsStep = () => (
+    <div className="space-y-6">
+      <div>
+        <label className="block font-semibold mb-2">Show Name</label>
+        <input
+          type="text"
+          value={showDraft.name}
+          onChange={(e) => setShowDraft({ ...showDraft, name: e.target.value })}
+          className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
+          placeholder="Saturday Night Spectacular"
+        />
+      </div>
+      <div>
+        <label className="block font-semibold mb-2">Description</label>
+        <textarea
+          value={showDraft.description || ""}
+          onChange={(e) => setShowDraft({ ...showDraft, description: e.target.value })}
+          className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
+          placeholder="Share a quick overview for hosts or producers."
+          rows={3}
+        />
+      </div>
+      <div className="grid md:grid-cols-3 gap-4">
         <div>
-          <label className="block font-semibold mb-2">Show Name</label>
+          <label className="block font-semibold mb-1">Number of Teams</label>
           <input
-            type="text"
-            value={showDraft.name}
-            onChange={(e) => setShowDraft({ ...showDraft, name: e.target.value })}
+            type="number"
+            min={1}
+            max={6}
+            value={showDraft.settings.numTeams}
+            onChange={(e) =>
+              updateSettings({ numTeams: Math.max(1, Math.min(6, Number(e.target.value))) })
+            }
             className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
-            placeholder="Saturday Night Spectacular"
           />
         </div>
         <div>
-          <label className="block font-semibold mb-2">Description</label>
-          <textarea
-            value={showDraft.description || ""}
-            onChange={(e) => setShowDraft({ ...showDraft, description: e.target.value })}
+          <label className="block font-semibold mb-1">Players per Team</label>
+          <input
+            type="number"
+            min={1}
+            max={6}
+            value={showDraft.settings.playersPerTeam}
+            onChange={(e) =>
+              updateSettings({ playersPerTeam: Math.max(1, Math.min(6, Number(e.target.value))) })
+            }
             className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
-            placeholder="Share a quick overview for hosts or producers."
-            rows={3}
           />
         </div>
-        <div className="grid md:grid-cols-3 gap-4">
-          <div>
-            <label className="block font-semibold mb-1">Number of Teams</label>
-            <input
-              type="number"
-              min={1}
-              max={6}
-              value={showDraft.settings.numTeams}
-              onChange={(e) =>
-                updateSettings({ numTeams: Math.max(1, Math.min(6, Number(e.target.value))) })
-              }
-              className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
-            />
-          </div>
-          <div>
-            <label className="block font-semibold mb-1">Players per Team</label>
-            <input
-              type="number"
-              min={1}
-              max={6}
-              value={showDraft.settings.playersPerTeam}
-              onChange={(e) =>
-                updateSettings({ playersPerTeam: Math.max(1, Math.min(6, Number(e.target.value))) })
-              }
-              className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
-            />
-          </div>
-          <div>
-            <label className="block font-semibold mb-1">Language</label>
-            <select
-              value={showDraft.settings.language || "es"}
-              onChange={(e) => updateSettings({ language: e.target.value as any })}
-              className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
-            >
-              <option value="es">Español 🇬🇶</option>
-              <option value="en">English 🇺🇸</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="block font-semibold mb-1">Host Mode</label>
-            <select
-              value={showDraft.settings.hostControl || "manual"}
-              onChange={(e) => updateSettings({ hostControl: e.target.value as any })}
-              className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
-            >
-              <option value="ipad">iPad Mode</option>
-              <option value="manual">Manual Mode (PC)</option>
-            </select>
-          </div>
-          <div>
-            <label className="block font-semibold mb-1">Player Mode</label>
-            <select
-              value={showDraft.settings.playerControl || "manual"}
-              onChange={(e) => updateSettings({ playerControl: e.target.value as any })}
-              className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
-            >
-              <option value="ipad">iPad Mode (Remote)</option>
-              <option value="manual">Manual Mode (PC)</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="block font-semibold mb-1">Location / Venue</label>
-            <input
-              type="text"
-              value={showDraft.settings.location || ""}
-              onChange={(e) => updateSettings({ location: e.target.value })}
-              className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
-              placeholder="e.g. Smithsonian, DC"
-            />
-          </div>
-          <div>
-            <label className="block font-semibold mb-1">Notes</label>
-            <textarea
-              value={showDraft.settings.notes || ""}
-              onChange={(e) => updateSettings({ notes: e.target.value })}
-              className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
-              placeholder="Add reminders or pacing notes."
-              rows={1}
-            />
-          </div>
-        </div>
-
-        {/* ── Sponsor Logos ── */}
-        <div className="bg-base-300 p-5 rounded-xl border border-base-300 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold text-brand-primary uppercase tracking-wider">🏅 Sponsor Logos</h3>
-              <p className="text-xs text-text-secondary mt-0.5">Logos will appear on the main show screen above the title.</p>
-            </div>
-            {(showDraft.sponsors || []).length < 6 && (
-              <button
-                type="button"
-                onClick={addSponsorInBasics}
-                className="text-sm bg-brand-primary text-white px-3 py-1.5 rounded-lg font-semibold hover:opacity-90 transition-all"
-              >
-                + Add Sponsor
-              </button>
-            )}
-          </div>
-
-          {(showDraft.sponsors || []).length === 0 ? (
-            <button
-              type="button"
-              onClick={addSponsorInBasics}
-              className="w-full border-2 border-dashed border-base-300 rounded-xl py-8 text-text-secondary text-sm hover:border-brand-primary/50 hover:text-brand-primary/70 transition-all"
-            >
-              + Click to add your first sponsor logo
-            </button>
-          ) : (
-            <div className="space-y-2">
-              {(showDraft.sponsors || []).map((sponsor, index) => (
-                <div key={sponsor.id} className="flex flex-col md:flex-row items-center gap-3 p-3 bg-base-100 border border-base-300 rounded-lg">
-                  <span className="text-xs font-bold text-slate-500 w-6">#{index + 1}</span>
-                  <div className="flex-1 flex items-center gap-3">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, (path) => updateSponsorInBasics(sponsor.id, { url: path }))}
-                      className="hidden"
-                      id={`sponsor-basics-${sponsor.id}`}
-                    />
-                    <label
-                      htmlFor={`sponsor-basics-${sponsor.id}`}
-                      className="px-3 py-1.5 bg-slate-800 text-white rounded-lg cursor-pointer font-semibold text-xs border border-slate-700 hover:bg-slate-700 transition-all whitespace-nowrap"
-                    >
-                      {sponsor.url ? "✓ Change" : "Upload Logo"}
-                    </label>
-                    {sponsor.url && (
-                      <img src={sponsor.url} alt="Sponsor preview" className="h-8 w-auto object-contain rounded border border-base-300" />
-                    )}
-                    <span className="text-xs text-text-secondary truncate max-w-[180px]">
-                      {sponsor.url ? sponsor.url.split('/').pop() : "No file"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={sponsor.size}
-                      onChange={(e) => updateSponsorInBasics(sponsor.id, { size: e.target.value as any })}
-                      className="rounded-lg p-1.5 bg-base-200 border border-base-300 text-xs"
-                    >
-                      <option value="small">Small</option>
-                      <option value="medium">Medium</option>
-                      <option value="large">Large</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => removeSponsorInBasics(sponsor.id)}
-                      className="text-red-400 hover:text-red-300 p-1"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── Commercial Slideshow Assets ── */}
-        <div className="bg-base-300 p-5 rounded-xl border border-base-300 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold text-brand-primary uppercase tracking-wider">🎬 Commercial Assets</h3>
-              <p className="text-xs text-text-secondary mt-0.5">Images shown in a slideshow during lobby and intermissions.</p>
-            </div>
-            {(showDraft.assets || []).length < 4 && (
-              <button
-                type="button"
-                onClick={addAssetInBasics}
-                className="text-sm bg-brand-primary/80 text-white px-3 py-1.5 rounded-lg font-semibold hover:opacity-90 transition-all"
-              >
-                + Add Asset
-              </button>
-            )}
-          </div>
-
-          {(showDraft.assets || []).length === 0 ? (
-            <button
-              type="button"
-              onClick={addAssetInBasics}
-              className="w-full border-2 border-dashed border-base-300 rounded-xl py-6 text-text-secondary text-sm hover:border-brand-primary/40 hover:text-brand-primary/60 transition-all"
-            >
-              + Click to add a commercial image (up to 4)
-            </button>
-          ) : (
-            <div className="space-y-2">
-              {(showDraft.assets || []).map((asset, index) => (
-                <div key={asset.id} className="flex flex-col md:flex-row items-center gap-3 p-3 bg-base-100 border border-base-300 rounded-lg">
-                  <span className="text-xs font-bold text-slate-500 w-6">#{index + 1}</span>
-                  <div className="flex-1 flex items-center gap-3">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, (path) => updateAssetInBasics(asset.id, { url: path }))}
-                      className="hidden"
-                      id={`asset-basics-${asset.id}`}
-                    />
-                    <label
-                      htmlFor={`asset-basics-${asset.id}`}
-                      className="px-3 py-1.5 bg-slate-800 text-white rounded-lg cursor-pointer font-semibold text-xs border border-slate-700 hover:bg-slate-700 transition-all whitespace-nowrap"
-                    >
-                      {asset.url ? "✓ Change" : "Upload Image"}
-                    </label>
-                    {asset.url && (
-                      <img src={asset.url} alt="Asset preview" className="h-8 w-auto object-contain rounded border border-base-300" />
-                    )}
-                    <span className="text-xs text-text-secondary truncate max-w-[180px]">
-                      {asset.url ? asset.url.split('/').pop() : "No file"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={asset.size}
-                      onChange={(e) => updateAssetInBasics(asset.id, { size: e.target.value as any })}
-                      className="rounded-lg p-1.5 bg-base-200 border border-base-300 text-xs"
-                    >
-                      <option value="small">Small</option>
-                      <option value="medium">Medium</option>
-                      <option value="large">Large</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => removeAssetInBasics(asset.id)}
-                      className="text-red-400 hover:text-red-300 p-1"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        <div>
+          <label className="block font-semibold mb-1">Language</label>
+          <select
+            value={showDraft.settings.language || "es"}
+            onChange={(e) => updateSettings({ language: e.target.value as any })}
+            className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
+          >
+            <option value="es">Español 🇬🇶</option>
+            <option value="en">English 🇺🇸</option>
+          </select>
         </div>
       </div>
-    );
-  };
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <label className="block font-semibold mb-1">Host Mode</label>
+          <select
+            value={showDraft.settings.hostControl || "ipad"}
+            onChange={(e) => updateSettings({ hostControl: e.target.value as any })}
+            className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
+          >
+            <option value="ipad">iPad Mode</option>
+            <option value="manual">Manual Mode (PC)</option>
+          </select>
+        </div>
+        <div>
+          <label className="block font-semibold mb-1">Player Mode</label>
+          <select
+            value={showDraft.settings.playerControl || "ipad"}
+            onChange={(e) => updateSettings({ playerControl: e.target.value as any })}
+            className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
+          >
+            <option value="ipad">iPad Mode (Remote)</option>
+            <option value="manual">Manual Mode (PC)</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className="block font-semibold mb-2">Notes</label>
+        <textarea
+          value={showDraft.settings.notes || ""}
+          onChange={(e) => updateSettings({ notes: e.target.value })}
+          className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
+          placeholder="Add reminders or pacing notes."
+          rows={3}
+        />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <label className="block font-semibold mb-2">📍 Location</label>
+          <input
+            type="text"
+            value={showDraft.settings.location || ""}
+            onChange={(e) => updateSettings({ location: e.target.value })}
+            className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
+            placeholder="e.g. Malabo Conference Room A"
+          />
+          <p className="text-xs text-text-secondary mt-1">Shown in the Session Lobby instead of Remote Session.</p>
+        </div>
+        <div className="flex flex-col justify-center gap-3 bg-base-200 rounded-lg p-4 border border-base-300">
+          <label className="flex items-center justify-between cursor-pointer">
+            <div>
+              <p className="font-semibold">🎵 Music in Lobby</p>
+              <p className="text-xs text-text-secondary">Keep intro music playing during the Session Lobby.</p>
+            </div>
+            <div
+              onClick={() => updateSettings({ musicInLobby: !(showDraft.settings.musicInLobby ?? true) })}
+              className={`relative w-12 h-6 rounded-full transition-colors cursor-pointer ${(showDraft.settings.musicInLobby ?? true) ? "bg-brand-primary" : "bg-base-300"}`}
+            >
+              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${(showDraft.settings.musicInLobby ?? true) ? "left-7" : "left-1"}`} />
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+  );
 
   const renderTeamsStep = () => (
     <div className="grid gap-4">
@@ -1055,403 +856,8 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
           </div>
         ))}
       </div>
-      <div className="bg-base-200 rounded-xl p-4 border border-base-300 space-y-4">
-        <h3 className="text-lg font-semibold">Sponsors & Credits</h3>
-        <div className="grid md:grid-cols-2 gap-6 text-sm">
-          <div className="space-y-2">
-            <p className="text-xs text-text-secondary uppercase font-bold">Lobby Details</p>
-            <p><strong>Location:</strong> {showDraft.settings.location || "Not configured"}</p>
-            <p><strong>Theme Background:</strong> {showDraft.themeImage || "None"}</p>
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs text-text-secondary uppercase font-bold">Ending Credits</p>
-            <p><strong>Winner Title:</strong> {showDraft.settings.winnerTitle || "Not configured"}</p>
-            <p><strong>Thank You Message:</strong> {showDraft.settings.thankYouMessage || "Not configured"}</p>
-          </div>
-        </div>
-        <div className="grid md:grid-cols-2 gap-6 pt-3 border-t border-base-300 text-sm">
-          <div>
-            <p className="text-xs text-text-secondary uppercase font-bold mb-2">Sponsors ({ (showDraft.sponsors || []).length })</p>
-            { (showDraft.sponsors || []).length === 0 ? (
-              <p className="text-xs text-text-secondary italic">No sponsors added.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                { (showDraft.sponsors || []).map(s => (
-                  <span key={s.id} className="px-2.5 py-1 bg-base-100 rounded border border-base-300 text-xs truncate max-w-[200px]">
-                    {s.url} ({s.size})
-                  </span>
-                )) }
-              </div>
-            )}
-          </div>
-          <div>
-            <p className="text-xs text-text-secondary uppercase font-bold mb-2">Commercial Assets ({ (showDraft.assets || []).length })</p>
-            { (showDraft.assets || []).length === 0 ? (
-              <p className="text-xs text-text-secondary italic">No assets added.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                { (showDraft.assets || []).map(a => (
-                  <span key={a.id} className="px-2.5 py-1 bg-base-100 rounded border border-base-300 text-xs truncate max-w-[200px]">
-                    {a.url} ({a.size})
-                  </span>
-                )) }
-              </div>
-            )}
-          </div>
-        </div>
-        { (showDraft.settings.organizers || []).length > 0 && (
-          <div className="pt-3 border-t border-base-300 text-sm">
-            <p className="text-xs text-text-secondary uppercase font-bold mb-2">Production Team</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              { (showDraft.settings.organizers || []).map(o => (
-                <div key={o.id} className="bg-base-100 border border-base-300 p-2 rounded text-xs">
-                  <p className="font-bold">{o.role || "TBD"}</p>
-                  <p className="text-text-secondary">{o.name || "TBD"}</p>
-                </div>
-              )) }
-            </div>
-          </div>
-        ) }
-      </div>
     </div>
   );
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (path: string) => void) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = reader.result as string;
-      try {
-        if (window.electronAPI) {
-          const relativePath = await window.electronAPI.invoke("save-data-url", base64);
-          if (relativePath) {
-            callback(relativePath);
-          }
-        }
-      } catch (err) {
-        console.error("File upload failed:", err);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const renderEndingCreditsStep = () => {
-    const addSponsor = () => {
-      const newSponsor = { id: uuid(), url: "", size: "medium" as const };
-      setShowDraft(prev => ({
-        ...prev,
-        sponsors: [...(prev.sponsors || []), newSponsor]
-      }));
-    };
-
-    const updateSponsor = (id: string, updates: Partial<ShowMediaItem>) => {
-      setShowDraft(prev => ({
-        ...prev,
-        sponsors: (prev.sponsors || []).map(s => s.id === id ? { ...s, ...updates } : s)
-      }));
-    };
-
-    const removeSponsor = (id: string) => {
-      setShowDraft(prev => ({
-        ...prev,
-        sponsors: (prev.sponsors || []).filter(s => s.id !== id)
-      }));
-    };
-
-    const addAsset = () => {
-      const newAsset = { id: uuid(), url: "", size: "medium" as const };
-      setShowDraft(prev => ({
-        ...prev,
-        assets: [...(prev.assets || []), newAsset]
-      }));
-    };
-
-    const updateAsset = (id: string, updates: Partial<ShowMediaItem>) => {
-      setShowDraft(prev => ({
-        ...prev,
-        assets: (prev.assets || []).map(a => a.id === id ? { ...a, ...updates } : a)
-      }));
-    };
-
-    const removeAsset = (id: string) => {
-      setShowDraft(prev => ({
-        ...prev,
-        assets: (prev.assets || []).filter(a => a.id !== id)
-      }));
-    };
-
-    const addOrganizer = () => {
-      const newOrg = { id: uuid(), role: "", name: "" };
-      updateSettings({
-        organizers: [...(showDraft.settings.organizers || []), newOrg]
-      });
-    };
-
-    const updateOrganizer = (id: string, role: string, name: string) => {
-      updateSettings({
-        organizers: (showDraft.settings.organizers || []).map(o => o.id === id ? { ...o, role, name } : o)
-      });
-    };
-
-    const removeOrganizer = (id: string) => {
-      updateSettings({
-        organizers: (showDraft.settings.organizers || []).filter(o => o.id !== id)
-      });
-    };
-
-    return (
-      <div className="space-y-8">
-        {/* Lobby Details */}
-        <div className="bg-base-300 p-6 rounded-xl border border-base-300 space-y-4">
-          <h3 className="text-lg font-bold text-brand-primary uppercase tracking-wider">Lobby Details</h3>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block font-semibold mb-2">Location / Venue</label>
-              <input
-                type="text"
-                value={showDraft.settings.location || ""}
-                onChange={(e) => updateSettings({ location: e.target.value })}
-                className="w-full rounded-lg p-3 bg-base-100 border border-base-300"
-                placeholder="e.g. Centro Cultural de Malabo"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold mb-2">Theme Background Image</label>
-              <div className="flex items-center gap-4">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleFileUpload(e, (path) => setShowDraft({ ...showDraft, themeImage: path }))}
-                  className="hidden"
-                  id="theme-upload"
-                />
-                <label
-                  htmlFor="theme-upload"
-                  className="px-4 py-2 bg-brand-primary text-white rounded-lg cursor-pointer font-bold text-sm hover:opacity-90 transition-all"
-                >
-                  Choose File
-                </label>
-                {showDraft.themeImage && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-text-secondary truncate max-w-[200px]">{showDraft.themeImage}</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowDraft({ ...showDraft, themeImage: "" })}
-                      className="text-red-400 hover:text-red-300"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sponsors */}
-        <div className="bg-base-300 p-6 rounded-xl border border-base-300 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-brand-primary uppercase tracking-wider">Sponsors (Logos)</h3>
-            <button
-              type="button"
-              onClick={addSponsor}
-              className="text-sm bg-brand-primary text-white px-3 py-1.5 rounded-lg font-semibold hover:opacity-90 transition-all"
-            >
-              + Add Sponsor
-            </button>
-          </div>
-          
-          {(showDraft.sponsors || []).length === 0 ? (
-            <p className="text-sm text-text-secondary italic">No sponsors added yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {(showDraft.sponsors || []).map((sponsor, index) => (
-                <div key={sponsor.id} className="flex flex-col md:flex-row items-center gap-4 p-4 bg-base-100 border border-base-300 rounded-lg">
-                  <span className="font-bold text-slate-500">#{index + 1}</span>
-                  <div className="flex-1 flex items-center gap-4">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, (path) => updateSponsor(sponsor.id, { url: path }))}
-                      className="hidden"
-                      id={`sponsor-${sponsor.id}`}
-                    />
-                    <label
-                      htmlFor={`sponsor-${sponsor.id}`}
-                      className="px-3 py-1.5 bg-slate-800 text-white rounded-lg cursor-pointer font-semibold text-xs border border-slate-700 hover:bg-slate-700 transition-all"
-                    >
-                      Upload Logo
-                    </label>
-                    <span className="text-xs text-text-secondary truncate max-w-[200px]">
-                      {sponsor.url || "No file uploaded"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label className="text-xs font-semibold">Display Size</label>
-                    <select
-                      value={sponsor.size}
-                      onChange={(e) => updateSponsor(sponsor.id, { size: e.target.value as any })}
-                      className="rounded-lg p-2 bg-base-200 border border-base-300 text-xs"
-                    >
-                      <option value="small">Small</option>
-                      <option value="medium">Medium</option>
-                      <option value="large">Large</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => removeSponsor(sponsor.id)}
-                      className="text-red-400 hover:text-red-300 p-2"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Commercial Assets */}
-        <div className="bg-base-300 p-6 rounded-xl border border-base-300 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-brand-primary uppercase tracking-wider">Commercial Slideshow Assets</h3>
-            <button
-              type="button"
-              onClick={addAsset}
-              className="text-sm bg-brand-primary text-white px-3 py-1.5 rounded-lg font-semibold hover:opacity-90 transition-all"
-            >
-              + Add Commercial Image
-            </button>
-          </div>
-          
-          {(showDraft.assets || []).length === 0 ? (
-            <p className="text-sm text-text-secondary italic">No commercial assets added yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {(showDraft.assets || []).map((asset, index) => (
-                <div key={asset.id} className="flex flex-col md:flex-row items-center gap-4 p-4 bg-base-100 border border-base-300 rounded-lg">
-                  <span className="font-bold text-slate-500">#{index + 1}</span>
-                  <div className="flex-1 flex items-center gap-4">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, (path) => updateAsset(asset.id, { url: path }))}
-                      className="hidden"
-                      id={`asset-${asset.id}`}
-                    />
-                    <label
-                      htmlFor={`asset-${asset.id}`}
-                      className="px-3 py-1.5 bg-slate-800 text-white rounded-lg cursor-pointer font-semibold text-xs border border-slate-700 hover:bg-slate-700 transition-all"
-                    >
-                      Upload Image
-                    </label>
-                    <span className="text-xs text-text-secondary truncate max-w-[200px]">
-                      {asset.url || "No file uploaded"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label className="text-xs font-semibold">Display Size</label>
-                    <select
-                      value={asset.size}
-                      onChange={(e) => updateAsset(asset.id, { size: e.target.value as any })}
-                      className="rounded-lg p-2 bg-base-200 border border-base-300 text-xs"
-                    >
-                      <option value="small">Small</option>
-                      <option value="medium">Medium</option>
-                      <option value="large">Large</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => removeAsset(asset.id)}
-                      className="text-red-400 hover:text-red-300 p-2"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Ending Credits */}
-        <div className="bg-base-300 p-6 rounded-xl border border-base-300 space-y-6">
-          <h3 className="text-lg font-bold text-brand-primary uppercase tracking-wider">Ending Credits & Messages</h3>
-          
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block font-semibold mb-2">Winner Ceremony Title</label>
-              <input
-                type="text"
-                value={showDraft.settings.winnerTitle || ""}
-                onChange={(e) => updateSettings({ winnerTitle: e.target.value })}
-                className="w-full rounded-lg p-3 bg-base-100 border border-base-300"
-                placeholder="e.g. ¡FELICIDADES AL GANADOR!"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold mb-2">Thank You Message</label>
-              <input
-                type="text"
-                value={showDraft.settings.thankYouMessage || ""}
-                onChange={(e) => updateSettings({ thankYouMessage: e.target.value })}
-                className="w-full rounded-lg p-3 bg-base-100 border border-base-300"
-                placeholder="e.g. Gracias por acompañarnos en esta aventura."
-              />
-            </div>
-          </div>
-
-          <div className="space-y-4 pt-4 border-t border-base-300">
-            <div className="flex items-center justify-between">
-              <label className="block font-semibold">Organizers / Production Team Credits</label>
-              <button
-                type="button"
-                onClick={addOrganizer}
-                className="text-xs bg-slate-800 border border-slate-700 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-slate-700 transition-all"
-              >
-                + Add Organizer Row
-              </button>
-            </div>
-
-            {(showDraft.settings.organizers || []).length === 0 ? (
-              <p className="text-sm text-text-secondary italic">No organizers listed. Default credits will scroll.</p>
-            ) : (
-              <div className="space-y-3">
-                {(showDraft.settings.organizers || []).map((org) => (
-                  <div key={org.id} className="flex gap-4 items-center bg-base-100 p-3 rounded-lg border border-base-300">
-                    <div className="flex-1 grid grid-cols-2 gap-3">
-                      <input
-                        type="text"
-                        value={org.role}
-                        onChange={(e) => updateOrganizer(org.id, e.target.value, org.name)}
-                        className="rounded-lg p-2 bg-base-200 border border-base-300 text-xs font-semibold"
-                        placeholder="Role (e.g. Executive Producer)"
-                      />
-                      <input
-                        type="text"
-                        value={org.name}
-                        onChange={(e) => updateOrganizer(org.id, org.role, e.target.value)}
-                        className="rounded-lg p-2 bg-base-200 border border-base-300 text-xs"
-                        placeholder="Name (e.g. Victor M. Ele Ela)"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeOrganizer(org.id)}
-                      className="text-red-400 hover:text-red-300 p-2"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const renderStep = () => {
     switch (step) {
@@ -1462,8 +868,6 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
       case 2:
         return renderRoundsStep();
       case 3:
-        return renderEndingCreditsStep();
-      case 4:
       default:
         return renderReviewStep();
     }

@@ -66,9 +66,6 @@ export function coerceGame(raw: any, idFromDoc?: string): Game {
         ...base,
         type: GameType.JEOPARDY,
         categories: Array.isArray(raw?.categories) ? raw.categories : [],
-        teams: Array.isArray(raw?.teams) && raw.teams.length >= 2
-          ? [raw.teams[0], raw.teams[1]]
-          : ['Team A', 'Team B'],
       };
       return g;
     }
@@ -180,9 +177,8 @@ export function coerceGame(raw: any, idFromDoc?: string): Game {
       const g: LotteryGame = {
         ...base,
         type: GameType.LOTTERY,
-        mode: raw?.mode ?? 'TRADITIONAL',
         tickets: Array.isArray(raw?.tickets) ? raw.tickets : [],
-        draw: raw?.draw ?? null,
+        draws: Array.isArray(raw?.draws) ? raw.draws : [],
       };
       return g;
     }

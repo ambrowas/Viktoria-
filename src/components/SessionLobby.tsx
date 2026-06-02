@@ -1,26 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSync } from '@/context/SyncContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, UserPlus, Play, QrCode, Monitor, Tablet, Copy, Check, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Users, UserPlus, Play, QrCode, Monitor, Tablet, Copy, Check, ShieldCheck, MapPin, Volume2, VolumeX } from 'lucide-react';
 import { Team } from '@/types';
 import TeamIcon from '@/components/TeamIcon';
+import { checkInSound } from '@/utils/sound';
 
 interface SessionLobbyProps {
     teams: Team[];
     onStart: () => void;
     hostControl?: "ipad" | "manual";
-    onBack?: () => void;
-    themeImage?: string;
+    isViewer?: boolean;
+    overrideParticipants?: ReturnType<typeof useSync>['participants'];
     location?: string;
+    onFadeOutMusic?: () => void;
+    isMusicPlaying?: boolean;
 }
 
-const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl, onBack, themeImage, location }) => {
+const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl, isViewer = false, overrideParticipants, location, onFadeOutMusic, isMusicPlaying = false }) => {
     console.log("Lobby hostControl:", hostControl);
-    const { sessionId, participants, sessionData, registerParticipant } = useSync();
+    const { sessionId, participants: syncParticipants, sessionData, registerParticipant } = useSync();
+    const participants = overrideParticipants ?? syncParticipants;
+    const prevCountRef = useRef(participants.length);
     useEffect(() => {
         console.log("Lobby mounted. sessionId:", sessionId);
     }, [sessionId]);
     const [copied, setCopied] = useState(false);
+
+    // 🎉 Play check-in sound whenever participant count increases
+    useEffect(() => {
+        if (participants.length > prevCountRef.current) {
+            checkInSound.play();
+        }
+        prevCountRef.current = participants.length;
+    }, [participants.length]);
 
     const handleCopy = () => {
         if (sessionId) {
@@ -45,23 +58,18 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                     <p className="text-slate-400 text-xl">Waiting for players to connect and lock in teams...</p>
                 </div>
 
-                <div className="flex flex-col items-end">
-                    <div
-                        onClick={handleCopy}
-                        className={`bg-slate-900 border-2 border-slate-800 p-6 rounded-3xl transition-all group relative active:scale-95 ${sessionId ? 'cursor-pointer hover:border-yellow-400' : 'opacity-50'}`}
-                    >
-                        <p className="text-xs text-slate-500 uppercase tracking-widest mb-1 group-hover:text-yellow-400 transition-colors">
-                            {sessionId ? 'Join PIN' : 'Remote Status'}
+                <div className="flex flex-col items-end gap-4">
+                    {/* Location badge */}
+                    <div className="bg-slate-900 border-2 border-slate-800 px-6 py-4 rounded-3xl">
+                        <p className="text-xs text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
+                            <MapPin size={11} /> Location
                         </p>
-                        <div className="flex items-center gap-4">
-                            <span className="text-6xl font-mono font-black tracking-tighter">
-                                {sessionId || 'OFFLINE'}
-                            </span>
-                            {sessionId && (copied ? <Check className="text-green-500" /> : <Copy className="text-slate-600 group-hover:text-slate-400" />)}
-                        </div>
+                        <p className="text-3xl font-black tracking-tighter text-white">
+                            {location || '—'}
+                        </p>
                     </div>
-                    <p className="mt-4 text-slate-500 text-sm flex items-center gap-2">
-                        <Monitor size={14} /> Host Mode &bull; <span className="text-slate-600">Local Sync</span>
+                    <p className="text-slate-500 text-sm flex items-center gap-2">
+                        <Monitor size={14} /> Host Mode &bull; <Tablet size={14} /> iPad Players
                     </p>
                 </div>
             </header>
@@ -93,7 +101,7 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                                     <h3 className="text-2xl font-black uppercase text-left">{team.name}</h3>
                                     <div className="flex items-center gap-3">
                                         <p className="text-slate-500 font-bold">{members.length} PLAYERS</p>
-                                        {(true) && (
+                                        {!isViewer && (true) && (
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -103,6 +111,9 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                                                         const originalText = btn.innerText;
                                                         btn.innerText = "...";
                                                         console.log("Lobby: Triggering check-in for", team.name);
+
+                                                        // 🎉 Play immediately on click — don't wait for state update
+                                                        checkInSound.play();
 
                                                         registerParticipant(sessionId || 'local', {
                                                             id: `manual-${team.id}-${Date.now()}`,
@@ -178,7 +189,7 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                                                 ))}
                                             </div>
 
-                                            {true && (
+                                            {!isViewer && true && (
                                                 <motion.button
                                                     whileHover={{ scale: 1.05 }}
                                                     whileTap={{ scale: 0.95 }}
@@ -200,6 +211,15 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                                         </div>
                                     </div>
                                 ) : (
+                                    isViewer ? (
+                                        // TV: show empty team placeholder (no click interaction)
+                                        <div className="h-full flex-1 flex flex-col items-center justify-center opacity-20 border-2 border-dashed border-white/20 rounded-[3rem] p-10">
+                                            <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6">
+                                                <UserPlus size={40} />
+                                            </div>
+                                            <p className="text-center font-black tracking-[0.2em] text-sm uppercase">WAITING...</p>
+                                        </div>
+                                    ) : (
                                     <motion.button
                                         whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.05)' }}
                                         whileTap={{ scale: 0.98 }}
@@ -221,6 +241,7 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                                         </div>
                                         <p className="text-center font-black tracking-[0.2em] text-sm uppercase group-hover:text-yellow-400">CLICK TO CHECK IN</p>
                                     </motion.button>
+                                    )
                                 )}
                             </div>
                         </motion.div>
@@ -228,7 +249,8 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                 })}
             </div>
 
-            {/* Sticky Actions */}
+            {/* Sticky Actions — hidden on TV */}
+            {!isViewer && (
             <footer className="sticky bottom-0 left-0 right-0 flex items-center justify-between bg-slate-900/95 backdrop-blur-2xl border-t border-white/5 p-8 -mx-12 -mb-12 z-50 mt-auto">
                 <div className="flex items-center gap-8">
                     <div className="flex items-center gap-3">
@@ -246,17 +268,21 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                             <p className="text-blue-400 font-bold text-sm">{unassignedCount} players joining teams...</p>
                         </div>
                     )}
+
+                    {/* Fade out music button */}
+                    {isMusicPlaying && onFadeOutMusic && (
+                        <motion.button
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            onClick={onFadeOutMusic}
+                            className="flex items-center gap-2 text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 px-4 py-2 rounded-xl transition-all text-sm font-bold"
+                        >
+                            <VolumeX size={16} /> Fade Music
+                        </motion.button>
+                    )}
                 </div>
 
                 <div className="flex gap-4">
-                    {onBack && (
-                        <button
-                            onClick={onBack}
-                            className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold px-8 py-5 rounded-[2rem] transition-all flex items-center gap-3"
-                        >
-                            <ArrowLeft size={20} /> Volver
-                        </button>
-                    )}
                     <button
                         className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-10 py-5 rounded-[2rem] transition-all flex items-center gap-3"
                     >
@@ -271,6 +297,7 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                     </button>
                 </div>
             </footer>
+            )}
         </div>
     );
 };

@@ -48,36 +48,25 @@ import type { Team } from "@/types";
 interface GameRouterProps {
   game: Game;
   teams: Team[];
-  allTeams?: Team[];
   teamScores: Record<string, number>;
   onScoreChange: (teamId: string, score: number) => void;
   onExit: (points?: Record<string, number>) => void;
   language?: "en" | "es";
   hostControl?: "ipad" | "manual";
   playerControl?: "ipad" | "manual";
-  isObserveOnly?: boolean;
-  isPreview?: boolean;
-  isFinalRound?: boolean;
-  themeMusicPath?: string;
-  organizers?: Array<{ id: string; role: string; name: string }>;
-  winnerTitle?: string;
-  thankYouMessage?: string;
+  isViewer?: boolean;
 }
 
 const GameRouter: React.FC<GameRouterProps> = ({
   game,
   teams,
-  allTeams,
   teamScores,
   onScoreChange,
   onExit,
   language,
-  hostControl = 'manual',
-  playerControl = 'manual',
-  isObserveOnly,
-  organizers,
-  winnerTitle,
-  thankYouMessage
+  hostControl = 'ipad',
+  playerControl = 'ipad',
+  isViewer = false,
 }) => {
   const { lang: globalLang } = useLanguage();
   const lang = language || globalLang;
@@ -159,13 +148,14 @@ const GameRouter: React.FC<GameRouterProps> = ({
   return (
     <Component
       game={game as any}
-      round={(game as any).round} // For Bingo 
+      round={(game as any).round}
       teams={teams}
       teamScores={teamScores}
       onScoreChange={onScoreChange}
       onExit={onExit}
       hostControl={hostControl}
       playerControl={playerControl}
+      isViewer={isViewer}
     />
   );
 };

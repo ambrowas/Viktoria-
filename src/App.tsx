@@ -85,94 +85,99 @@ const App: React.FC = () => {
     return localStorage.getItem('viktoria_isDualScreen') === 'true';
   });
 
+  // Detect TV viewer mode (set once, never changes)
+  const isLocalSyncViewer = React.useMemo(
+    () => new URLSearchParams(window.location.search).get('localSync') === 'true',
+    []
+  );
+
+  // Apply pointer-events: none to the whole TV window so it never reacts to clicks
+  useEffect(() => {
+    if (isLocalSyncViewer) {
+      document.body.classList.add('tv-viewer-mode');
+    }
+    return () => document.body.classList.remove('tv-viewer-mode');
+  }, [isLocalSyncViewer]);
+
   useEffect(() => {
     localStorage.setItem('viktoria_isDualScreen', isDualScreenActive ? 'true' : 'false');
   }, [isDualScreenActive]);
 
-  // ── DUAL SCREEN: BroadcastChannel local sync ────────────────────────────
-  // The PC broadcasts state to the TV window via BroadcastChannel.
-  // No Firebase involved — pure local, zero latency.
-  const dualScreenChannel = React.useRef<BroadcastChannel | null>(null);
-  const params = React.useMemo(() => new URLSearchParams(window.location.search), []);
-  const isLocalSyncViewer = params.get('localSync') === 'true';
+  // ── DUAL SCREEN BroadcastChannel Architecture ───────────────────────────────
+  // Single channel: 'viktoria-dual-screen'
+  // PC → TV: STATE_UPDATE (full state snapshot on every change)
+  // TV → PC: REQUEST_STATE (on mount, PC replies immediately)
 
-  // PC: open/close the BroadcastChannel when dual screen toggles
+  // Always-current ref — avoids stale closures in onmessage handlers
+  const latestDualState = React.useRef({ activeShow, activeGame, games });
   useEffect(() => {
-    if (isDualScreenActive && window.electronAPI && !isLocalSyncViewer) {
-      dualScreenChannel.current = new BroadcastChannel('viktoria-dual-screen');
-    } else if (!isDualScreenActive && dualScreenChannel.current) {
-      dualScreenChannel.current.close();
-      dualScreenChannel.current = null;
+    latestDualState.current = { activeShow, activeGame, games };
+  });
+
+  // PC: persistent channel, open while dual screen is active
+  const dualBC = React.useRef<BroadcastChannel | null>(null);
+  useEffect(() => {
+    if (isLocalSyncViewer) return; // TV is never a sender
+    if (!isDualScreenActive) {
+      dualBC.current?.close();
+      dualBC.current = null;
+      return;
     }
+    const bc = new BroadcastChannel('viktoria-dual-screen');
+    dualBC.current = bc;
+    bc.onmessage = (event) => {
+      if (event.data?.type === 'REQUEST_STATE') {
+        // TV just mounted — reply with the current snapshot
+        const { activeShow, activeGame, games } = latestDualState.current;
+        bc.postMessage({ type: 'STATE_UPDATE', activeShow, activeGame, games });
+      }
+    };
+    return () => { bc.close(); dualBC.current = null; };
   }, [isDualScreenActive, isLocalSyncViewer]);
 
-  // PC: broadcast state whenever activeShow or activeGame changes
+  // PC: broadcast on every meaningful state change
   useEffect(() => {
-    if (!isDualScreenActive || isLocalSyncViewer || !dualScreenChannel.current) return;
-    dualScreenChannel.current.postMessage({
+    if (isLocalSyncViewer || !dualBC.current) return;
+    dualBC.current.postMessage({
       type: 'STATE_UPDATE',
       activeShow: activeShow ?? null,
       activeGame: activeGame ?? null,
+      games,
     });
-  }, [isDualScreenActive, isLocalSyncViewer, activeShow, activeGame]);
+  }, [isLocalSyncViewer, activeShow, activeGame, games]);
 
-  // TV: receive state from PC via BroadcastChannel
+  // TV: listen for state from PC, apply immediately
   useEffect(() => {
     if (!isLocalSyncViewer) return;
     const bc = new BroadcastChannel('viktoria-dual-screen');
     bc.onmessage = (event) => {
-      const { type, activeShow: show, activeGame: game } = event.data;
+      const { type, activeShow, activeGame, games: g } = event.data;
       if (type === 'STATE_UPDATE') {
-        setActiveShow(show);
-        setActiveGame(game);
+        setActiveShow(activeShow ?? null);
+        setActiveGame(activeGame ?? null);
+        if (g?.length) setGames(g);
       }
     };
-    return () => bc.close();
+    // Request current state immediately on mount
+    bc.postMessage({ type: 'REQUEST_STATE' });
+    return () => bc.close(); // cleanup on unmount — no memory leaks
   }, [isLocalSyncViewer]);
-
-  // PC: notify when TV window is closed by user (Electron IPC event)
-  useEffect(() => {
-    if (!window.electronAPI) return;
-    (window.electronAPI as any).on('viewer-window-closed', () => {
-      console.log('App: Viewer window was closed by the user.');
-      setIsDualScreenActive(false);
-    });
-  }, []);
 
   const handleToggleDualScreen = async () => {
     if (isDualScreenActive) {
       setIsDualScreenActive(false);
       if (window.electronAPI) {
-        await window.electronAPI.invoke('close-viewer-window');
+        await window.electronAPI.invoke("close-viewer-window");
       }
     } else {
       setIsDualScreenActive(true);
       if (window.electronAPI) {
-        await window.electronAPI.invoke('open-viewer-window', '/?localSync=true');
+        await window.electronAPI.invoke("open-viewer-window", "/?localSync=true");
       }
     }
   };
 
-  const lastAppCommandTimestamp = React.useRef<number>(-1);
-  const hasInitializedAppCommand = React.useRef<boolean>(false);
-
-  useEffect(() => {
-    if (isRemoteMode && sessionData && !hasInitializedAppCommand.current) {
-      if (sessionData.hostCommand?.timestamp) {
-        lastAppCommandTimestamp.current = sessionData.hostCommand.timestamp;
-      } else {
-        lastAppCommandTimestamp.current = 0;
-      }
-      hasInitializedAppCommand.current = true;
-    }
-  }, [isRemoteMode, sessionData]);
-
-  useEffect(() => {
-    if (!sessionId) {
-      hasInitializedAppCommand.current = false;
-      lastAppCommandTimestamp.current = -1;
-    }
-  }, [sessionId]);
+  const lastAppCommandTimestamp = React.useRef<number>(Date.now());
 
   const toggleTheme = () => setIsDark((prev) => !prev);
 
@@ -235,8 +240,8 @@ const App: React.FC = () => {
       const { type, payload } = (sessionData as any).hostCommand;
       const ts = (sessionData as any).hostCommand.timestamp || 0;
 
-      // Skip if already processed or if listener runs before initialization
-      if (lastAppCommandTimestamp.current === -1 || (ts > 0 && ts <= lastAppCommandTimestamp.current)) return;
+      // Skip if already processed
+      if (ts > 0 && ts <= lastAppCommandTimestamp.current) return;
       if (ts > 0) lastAppCommandTimestamp.current = ts;
 
       if (type === 'quit_to_lobby') {
@@ -666,10 +671,14 @@ const App: React.FC = () => {
       );
     }
 
-
-    // 📱 iPad Host/Player UI — only on non-Electron web clients (actual iPad/phone)
-    if (!window.electronAPI && deviceRole === 'host') {
-      if (!sessionData) {
+    // 📱 Support Host Role (iPad)
+    if (deviceRole === 'host') {
+      // If we are on the PC, we ONLY want to render HostAdaptiveFactory 
+      // if we explicitly have an activeGame (user clicked it in the Library).
+      // We don't want to auto-resume from stale Firebase data.
+      if (window.electronAPI && !activeGame) {
+        // Fall through to regular PC rendering (Library, etc)
+      } else if (!window.electronAPI && !sessionData) {
         return (
           <div className="h-screen flex flex-col items-center justify-center p-8 text-center space-y-6 bg-[#0a0a0a]">
             <div className="w-20 h-20 border-4 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin mb-4"></div>
@@ -678,35 +687,97 @@ const App: React.FC = () => {
             </h2>
             <p className="text-text-secondary max-w-xs mx-auto text-sm leading-relaxed">
               {lang === 'es'
-                ? 'Sincronizando con el PC maestro.'
-                : 'Synchronizing with the master PC.'}
+                ? 'Sincronizando con el PC maestro. Asegúrate de que el código es correcto.'
+                : 'Synchronizing with the master PC. Ensure your code is correct.'}
             </p>
-            <button onClick={() => leaveSession()} className="mt-4 px-6 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold uppercase">
-              {lang === 'es' ? 'Cancelar' : 'Cancel'}
-            </button>
+
+            {/* 🛠️ PWA DIAGNOSTICS */}
+            <div className="flex flex-col items-center gap-2 py-4 border-y border-white/5 w-full max-w-xs">
+              <div className="text-[10px] font-mono opacity-50 uppercase tracking-widest flex justify-between w-full">
+                <span>Status:</span>
+                <span className="text-yellow-500 font-bold">{syncStatus}</span>
+              </div>
+              <div className="text-[10px] font-mono opacity-50 uppercase tracking-widest flex justify-between w-full">
+                <span>Version:</span>
+                <span className="text-white">v{version}</span>
+              </div>
+              {syncStatus === 'error_missing_session' && (
+                <div className="text-red-500 text-[10px] font-bold mt-2 animate-pulse">
+                  {lang === 'es' ? '¡SESIÓN NO ENCONTRADA!' : 'SESSION NOT FOUND!'}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3 w-full max-w-xs pt-4">
+              <button
+                onClick={() => leaveSession()}
+                className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-[0.2em] hover:bg-white/10 transition-all active:scale-95"
+              >
+                {lang === 'es' ? 'Cancelar y Salir' : 'Cancel & Exit'}
+              </button>
+
+              <button
+                onClick={() => {
+                  localStorage.clear();
+                  window.location.reload();
+                }}
+                className="w-full py-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[10px] text-red-400 font-black uppercase tracking-[0.2em] hover:bg-red-500/20"
+              >
+                {lang === 'es' ? 'FORZAR LOGIN (HARD RESET)' : 'FORCE LOGIN (HARD RESET)'}
+              </button>
+            </div>
           </div>
         );
-      }
-      const showData = sessionData?.fullShowData as Show;
-      const currentStep = sessionData?.currentStep;
-      const gameToController = activeGame || (sessionData?.fullGameData as Game);
-      return (
-        <div className="h-screen flex flex-col bg-[#0a0a0a] text-white overflow-hidden">
-          <MasterControlPanel />
-          {showData && currentStep && currentStep !== 'playing' ? (
-            <ShowHostController show={showData} />
-          ) : gameToController ? (
-            <HostAdaptiveFactory currentGame={gameToController} />
-          ) : (
-            <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-              Esperando partida...
+      } else {
+        const showData = sessionData?.fullShowData as Show;
+        const currentStep = sessionData?.currentStep;
+        const gameToController = activeGame || (sessionData?.fullGameData as Game);
+
+        try {
+          return (
+            <div className="h-screen flex flex-col bg-[#0a0a0a] text-white overflow-hidden">
+              <MasterControlPanel />
+              {showData && currentStep && currentStep !== 'playing' ? (
+                <ShowHostController show={showData} />
+              ) : gameToController ? (
+                <HostAdaptiveFactory currentGame={gameToController} />
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-slate-500 font-mono text-xs gap-4 p-8 text-center bg-[#0a0a0a]">
+                  <p className="text-lg font-bold text-slate-300">Waiting for PC to broadcast game payload...</p>
+                  <pre className="text-left bg-black/60 p-6 border border-white/10 rounded-xl overflow-auto w-full max-w-lg shadow-2xl">
+                    <span className="text-yellow-500 font-bold block mb-2">DEBUG STATE INFO (iPad Host):</span>
+                    {'\n'}Session Active: <span className={sessionData ? 'text-green-400' : 'text-red-400'}>{sessionData ? 'YES' : 'NO'}</span>
+                    {'\n'}Current Game ID: <span className="text-blue-400">{sessionData?.currentGameId || 'null'}</span>
+                    {'\n'}Full Game Payload: <span className={sessionData?.fullGameData ? 'text-green-400' : 'text-red-400'}>{sessionData?.fullGameData ? 'RECEIVED ✓' : 'MISSING ❌'}</span>
+                    {'\n'}Payload Type: <span className="text-purple-400">{(sessionData?.fullGameData as any)?.type || 'N/A'}</span>
+                    {'\n'}Local activeGame: <span className="text-orange-400">{(activeGame as any)?.type || 'null'}</span>
+                  </pre>
+                </div>
+              )}
+              <div className="bg-black/50 border-t border-white/5 p-2 px-6 flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-500">
+                <div>Viktoria Gameshow v{version} • HOST MODE</div>
+                <div>Session: {sessionId}</div>
+              </div>
             </div>
-          )}
-        </div>
-      );
+          );
+        } catch (e) {
+          console.error("App: Host Controller Crash", e);
+          return (
+            <div className="h-screen flex flex-col items-center justify-center p-8 text-center bg-[#0a0a0a]">
+              <h2 className="text-xl font-bold text-red-500 mb-4">Error de Interfaz</h2>
+              <button
+                onClick={() => window.location.reload()}
+                className="bg-white/10 px-6 py-2 rounded-lg text-sm"
+              >
+                REINTENTAR
+              </button>
+            </div>
+          );
+        }
+      }
     }
 
-    // 📱 Player Role (iPad/mobile)
+    // 📱 Support Player Role (iPad)
     if (deviceRole === 'player') {
       return <PlayerInterface />;
     }
@@ -728,6 +799,7 @@ const App: React.FC = () => {
           games={games}
           onExit={handleExitShow}
           initialState={activeShowInitialState || undefined}
+          isViewer={isLocalSyncViewer}
         />
       );
     }

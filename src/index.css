@@ -87,3 +87,10 @@ body {
   outline: 2px solid #fca311 !important;
   box-shadow: 0 0 10px #fca311aa;
 }
+/* ── TV Viewer Mode: disable all interaction ── */
+body.tv-viewer-mode,
+body.tv-viewer-mode * {
+  pointer-events: none !important;
+  user-select: none !important;
+  cursor: none !important;
+}

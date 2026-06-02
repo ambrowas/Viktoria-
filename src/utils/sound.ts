@@ -117,6 +117,7 @@ export const violinSound = createSound("violin.mp3", false, 0.9);
 
 // 🎡 Subtle ball spinning sound (like Powerball machine)
 export const spinSound = createSound("spinnersound.mp3", false, 0.85);
+export const checkInSound = createSound("magical.mp3", false, 0.8); // 🎉 Team check-in celebration
 
 // 🔊 Dramatic reveal sounds for progressive tension
 export const reveal1Sound = createSound("reveal1.mp3", false, 0.4);

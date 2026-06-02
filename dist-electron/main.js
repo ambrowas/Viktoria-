@@ -318,6 +318,63 @@ electron_1.ipcMain.handle("delete-game-local", async (_event, payload) => {
         return false;
     }
 });
+// Simple ping example
+electron_1.ipcMain.handle("ping", async () => {
+    console.log("Ping received from renderer");
+    return "pong from main 🚀";
+});
+// Language preference handlers
+electron_1.ipcMain.handle("get-language", async () => {
+    try {
+        if (fs_1.default.existsSync(userPrefsPath)) {
+            const data = JSON.parse(fs_1.default.readFileSync(userPrefsPath, "utf8"));
+            return data.language || "en";
+        }
+        return "en";
+    }
+    catch (error) {
+        console.error("Error reading preferences:", error);
+        return "en";
+    }
+});
+electron_1.ipcMain.handle("set-language", async (_event, lang) => {
+    try {
+        const prefs = fs_1.default.existsSync(userPrefsPath)
+            ? JSON.parse(fs_1.default.readFileSync(userPrefsPath, "utf8"))
+            : {};
+        prefs.language = lang;
+        fs_1.default.writeFileSync(userPrefsPath, JSON.stringify(prefs, null, 2));
+        console.log("✅ Language preference saved:", lang);
+        return true;
+    }
+    catch (error) {
+        console.error("Error saving language preference:", error);
+        return false;
+    }
+});
+// Generic message handler
+electron_1.ipcMain.on("message", (event, data) => {
+    console.log("📩 Received message from renderer:", data);
+    event.sender.send("message", { reply: "Hello from main process 👋" });
+});
+/* ----------------------------
+   APP LIFECYCLE
+----------------------------- */
+electron_1.app.whenReady().then(() => {
+    createWindow();
+    electron_1.app.on("activate", () => {
+        if (electron_1.BrowserWindow.getAllWindows().length === 0)
+            createWindow();
+    });
+});
+electron_1.app.on("window-all-closed", () => {
+    if (process.platform !== "darwin")
+        electron_1.app.quit();
+});
+// ✅ Log static assets path
+electron_1.app.on("ready", () => {
+    console.log("Static sounds path:", path_1.default.resolve(__dirname, "../dist/sounds"));
+});
 // ─── Show IPC Handlers ───────────────────────────────────────────────────────
 const showsDir = () => path_1.default.join(electron_1.app.getPath("userData"), "shows");
 const listLocalShows = () => {
@@ -385,59 +442,6 @@ electron_1.ipcMain.handle("delete-show-local", async (_event, payload) => {
         return false;
     }
 });
-// Save active show run state (for resume after restart)
-electron_1.ipcMain.handle("save-active-run-local", async (_event, payload) => {
-    const { id, runState } = payload || {};
-    if (!id)
-        return false;
-    try {
-        const dir = path_1.default.join(electron_1.app.getPath("userData"), "runs");
-        if (!fs_1.default.existsSync(dir))
-            fs_1.default.mkdirSync(dir, { recursive: true });
-        const filePath = path_1.default.join(dir, `${id}.json`);
-        fs_1.default.writeFileSync(filePath, JSON.stringify(runState, null, 2));
-        return true;
-    }
-    catch (error) {
-        console.error("Error saving active run:", error);
-        return false;
-    }
-});
-// Simple ping example
-electron_1.ipcMain.handle("ping", async () => {
-    console.log("Ping received from renderer");
-    return "pong from main 🚀";
-});
-// Language preference handlers
-electron_1.ipcMain.handle("get-language", async () => {
-    try {
-        if (fs_1.default.existsSync(userPrefsPath)) {
-            const data = JSON.parse(fs_1.default.readFileSync(userPrefsPath, "utf8"));
-            return data.language || "en";
-        }
-        return "en";
-    }
-    catch (error) {
-        console.error("Error reading preferences:", error);
-        return "en";
-    }
-});
-electron_1.ipcMain.handle("set-language", async (_event, lang) => {
-    try {
-        const prefs = fs_1.default.existsSync(userPrefsPath)
-            ? JSON.parse(fs_1.default.readFileSync(userPrefsPath, "utf8"))
-            : {};
-        prefs.language = lang;
-        fs_1.default.writeFileSync(userPrefsPath, JSON.stringify(prefs, null, 2));
-        console.log("✅ Language preference saved:", lang);
-        return true;
-    }
-    catch (error) {
-        console.error("Error saving language preference:", error);
-        return false;
-    }
-});
-// Generic message handler
 electron_1.ipcMain.on("message", (event, data) => {
     console.log("📩 Received message from renderer:", data);
     event.sender.send("message", { reply: "Hello from main process 👋" });
@@ -447,29 +451,21 @@ electron_1.ipcMain.on("message", (event, data) => {
 ----------------------------- */
 electron_1.ipcMain.handle("open-viewer-window", async (_event, urlPath = "/?role=viewer&localSync=true") => {
     try {
-        // Close any existing viewer window first
         if (viewerWin && !viewerWin.isDestroyed()) {
             viewerWin.close();
         }
-        // --- Detect the external (HDMI) display ---
         const displays = electron_1.screen.getAllDisplays();
         const primaryDisplay = electron_1.screen.getPrimaryDisplay();
-        // Pick the secondary display (the one with the biggest area that isn't primary).
-        // If none exists, fall back to the primary.
         const externalDisplay = displays
             .filter(d => d.id !== primaryDisplay.id)
             .sort((a, b) => (b.bounds.width * b.bounds.height) - (a.bounds.width * a.bounds.height))[0]
             || primaryDisplay;
         const { x, y, width, height } = externalDisplay.bounds;
         console.log(`🖥️ Opening viewer on display ${externalDisplay.id} at ${x},${y} (${width}x${height})`);
-        const isDev = process.env.NODE_ENV === "development" || !fs_1.default.existsSync(path_1.default.join(__dirname, "../dist/index.html"));
         viewerWin = new electron_1.BrowserWindow({
-            x,
-            y,
-            width,
-            height,
-            fullscreen: true, // Go fullscreen on the TV
-            frame: false, // No window chrome on the presentation screen
+            x, y, width, height,
+            fullscreen: true,
+            frame: false,
             title: "Viktoria — Pantalla TV",
             webPreferences: {
                 nodeIntegration: false,
@@ -478,14 +474,20 @@ electron_1.ipcMain.handle("open-viewer-window", async (_event, urlPath = "/?role
                 preload: path_1.default.join(__dirname, "preload.js"),
             },
         });
+        const indexPath = path_1.default.join(__dirname, "../dist/index.html");
+        const isDev = process.env.NODE_ENV === "development" || !fs_1.default.existsSync(indexPath);
         if (isDev) {
+            console.log("🛠️ Dev mode: loading viewer from Vite dev server...");
             await viewerWin.loadURL(`http://localhost:5173${urlPath}`);
         }
         else {
-            const fileUrl = `file://${path_1.default.join(__dirname, "../dist/index.html")}${urlPath}`;
-            await viewerWin.loadURL(fileUrl);
+            // In production, use loadFile() with query/hash options — loadURL("file://...?query") fails in Electron
+            const urlObj = new URL(urlPath, "file://dummy");
+            await viewerWin.loadFile(indexPath, {
+                search: urlObj.search ? urlObj.search.slice(1) : undefined, // strip leading '?'
+                hash: urlObj.hash ? urlObj.hash.slice(1) : undefined,
+            });
         }
-        // Notify the main window when the viewer is closed by the user
         viewerWin.on("closed", () => {
             viewerWin = null;
             if (win && !win.isDestroyed()) {
@@ -497,6 +499,9 @@ electron_1.ipcMain.handle("open-viewer-window", async (_event, urlPath = "/?role
     }
     catch (err) {
         console.error("❌ Failed to open viewer window:", err);
+        if (viewerWin && !viewerWin.isDestroyed())
+            viewerWin.destroy();
+        viewerWin = null;
         return false;
     }
 });
@@ -512,19 +517,4 @@ electron_1.ipcMain.handle("close-viewer-window", async () => {
         console.error("❌ Failed to close viewer window:", err);
         return false;
     }
-});
-electron_1.app.whenReady().then(() => {
-    createWindow();
-    electron_1.app.on("activate", () => {
-        if (electron_1.BrowserWindow.getAllWindows().length === 0)
-            createWindow();
-    });
-});
-electron_1.app.on("window-all-closed", () => {
-    if (process.platform !== "darwin")
-        electron_1.app.quit();
-});
-// ✅ Log static assets path
-electron_1.app.on("ready", () => {
-    console.log("Static sounds path:", path_1.default.resolve(__dirname, "../dist/sounds"));
 });

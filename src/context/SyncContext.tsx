@@ -56,13 +56,7 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [remoteParticipants, setRemoteParticipants] = useState<Participant[]>([]);
     const [localParticipants, setLocalParticipants] = useState<Participant[]>([]);
     const [isRemoteMode, setIsRemoteMode] = useState(false);
-    const [deviceRole, setDeviceRole] = useState<DeviceRole>(() => {
-        // If this window is the TV/viewer (localSync=true), always start as 'viewer'
-        // regardless of what's stored in localStorage (which is shared with the main PC window).
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('localSync') === 'true') return 'viewer';
-        return (localStorage.getItem('viktoria_deviceRole') as DeviceRole) || 'viewer';
-    });
+    const [deviceRole, setDeviceRole] = useState<DeviceRole>(() => (localStorage.getItem('viktoria_deviceRole') as DeviceRole) || 'viewer');
     const [syncStatus, setSyncStatus] = useState<string>('idle');
 
     // 1. Memoized Callbacks (Defenders of the Realm)
@@ -205,10 +199,6 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [sessionId]);
 
     useEffect(() => {
-        // Don't persist the role for the TV viewer window — it would overwrite the main PC window's role
-        // since they share the same localStorage (same origin).
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('localSync') === 'true') return;
         localStorage.setItem('viktoria_deviceRole', deviceRole);
     }, [deviceRole]);
 
