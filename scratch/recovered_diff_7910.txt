@@ -1,0 +1,78 @@
+Created At: 2026-06-02T05:08:16Z
+Completed At: 2026-06-02T05:08:16Z
+
+				The command completed successfully.
+				Output:
+				<truncated 1140 lines>
++                                >
++                                    🎮 START GAME 1
++                                </button>
+                             </div>
+-                        </div>
++                        )}
+                     </motion.div>
+                 )}
+ 
+                 {step === "lobby" && (
+                     <motion.div key="lobby" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full">
+-                        <SessionLobby teams={show.teams} onStart={() => nextAction()} hostControl={hostControl} />
++                        <SessionLobby 
++                            teams={show.teams} 
++                            onStart={handleStartShow} 
++                            hostControl={hostControl} 
++                            themeImage={show.themeImage}
++                            location={show.settings.location}
++                            onBack={onExit}
++                        />
+                     </motion.div>
+                 )}
+ 
+@@ -473,35 +903,53 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit }) => {
+ 
+                         <div className="space-y-4 mb-12">
+                             {show.teams
+-                                .sort((a, b) => (teamScores[b.id] || 0) - (teamScores[a.id] || 0))
+-                                .map((team, index) => (
+-                                    <motion.div
+-                                        key={team.id}
+-                                        layoutId={team.id}
+-                                        className="bg-base-200 border border-base-300 p-6 rounded-2xl flex items-center gap-6"
+-                                    >
+-                                        <div className="text-4xl font-black text-text-secondary w-12">{index + 1}º</div>
+-                                        <div
+-   
+<truncated 4076 bytes>
+                   )}
++                                                </div>
++                                                <div className="flex gap-2 mt-1">
++                                                    {team.players.map(p => (
++                                                        <span key={p.id} className="text-xs text-text-secondary bg-base-300 px-2 py-0.5 rounded">
++                                                            {p.name}
++                                                        </span>
++                                                    ))}
++                                                </div>
++                                            </div>
++                                            <div className="text-5xl font-black font-mono text-brand-primary">
++                                                {teamScores[team.id] || 0}
++                                            </div>
++                                        </motion.div>
++                                    );
++                                })}
+                         </div>
+ 
+                         <div className="flex justify-center gap-6">
+@@ -533,6 +981,13 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit }) => {
+                 )}
+             </AnimatePresence>
+ 
++            {/* Floating Commercial Assets slideshow on non-playing screens (e.g. lobby, leaderboard, announcement) */}
++            {step !== "intro" && show.assets && show.assets.some(a => a.url) && (
++                <div className="absolute bottom-16 right-6 z-50 pointer-events-none">
++                    <ActiveAssetsSlideshow assets={show.assets} />
++                </div>
++            )}
++
+             {/* Round/Game Info bar at bottom */}
+             <div className="fixed bottom-0 left-0 right-0 p-4 bg-black/50 backdrop-blur-md border-t border-white/10 flex justify-between items-center px-12 text-sm uppercase tracking-widest text-text-secondary font-bold">
+                 <div className="flex items-center gap-8">
+

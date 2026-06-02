@@ -1,0 +1,1224 @@
+diff --git a/src/screens/games/JeopardyGame.tsx b/src/screens/games/JeopardyGame.tsx
+index b2f3a59..d613e09 100644
+--- a/src/screens/games/JeopardyGame.tsx
++++ b/src/screens/games/JeopardyGame.tsx
+@@ -1,12 +1,12 @@
+-import React, { useEffect, useMemo, useState } from "react";
++import React, { useEffect, useMemo, useState, useRef } from "react";
+ import Lottie from "lottie-react";
+ import { JeopardyGame, JeopardyCategory, JeopardyQuestion, JeopardyTurnMode } from "@/types";
+ import { useSync } from "@/context/SyncContext";
++import { useLanguage } from "@/context/LanguageContext";
+ import { correctSound, wrongSound } from "@/utils/sound";
+ import { resolveMediaUrl } from "@/utils/media";
+ import fireworksAnimation from "@/assets/animations/fireworks.json";
+-
+-const TIMER_DURATION = 30;
++import { Eye, Volume2, X } from "lucide-react";
+ 
+ type ClueType = "CALL_FRIEND" | "ASK_HOST" | "ASK_OTHER_TEAM";
+ 
+@@ -17,14 +17,19 @@ interface TeamClueUsage {
+ 
+ interface ActiveClueState {
+   type: ClueType;
+-  usedBy: 0 | 1;
+-  targetTeam?: 0 | 1;
++  usedBy: number;
++  targetTeam?: number;
+   note?: string;
+ }
+ 
+ interface JeopardyGameProps {
+   game: JeopardyGame;
++  teams?: any[];
++  teamScores?: Record<string, number>;
++  onScoreChange?: (teamId: string, score: number) => void;
+   onExit: () => void;
++  isObserveOnly?: boolean;
++  isPreview?: boolean;
+ }
+ 
+ const TimerCircle: React.FC<{ timeLeft: number, duration: number }> = ({ timeLeft, duration }) => {
+@@ -91,8 +96,68 @@ const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" }> = ({ type }) => {
+ 
+ const otherTeam = (team: 0 | 1) => (team === 0 ? 1 : 0) as 0 | 1;
+ 
+-const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
++const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({
++  game,
++  teams,
++  teamScores: teamScoresProp,
++  onScoreChange,
++  onExit,
++  isObserveOnly = false,
++  isPreview = false
++}) => {
++  const TIMER_DURATION = game.questionTimer ?? 30;
+   const { sessionData, updateSession, isRemoteMode } = useSync();
++  const isPreviewOrObserve = isPreview || isObserveOnly;
++  const isSyncActive = isRemoteMode && !isPreviewOrObserve;
++  const { lang } = useLanguage();
++
++  const resolvedTeams = useMemo(() => {
++    if (teams && teams.length > 0) {
++      return teams;
++    }
++    if (sessionData?.fullShowData?.teams && sessionData.fullShowData.teams.length > 0) {
++      return sessionData.fullShowData.teams;
++    }
++    if (isRemoteMode && sessionData?.teams && sessionData.teams.length > 0) {
++      return sessionData.teams;
++    }
++    if (game.teams && game.teams.length > 0) {
++      return game.teams.map((name, idx) => ({
++        id: `fallback_${idx}`,
++        name,
++        score: 0,
++        players: []
++      }));
++    }
++
++    // Web app fallback: read from the Game Show stored in localStorage, otherwise use default show teams
++    if (!window.electronAPI) {
++      try {
++        const showsJson = localStorage.getItem("viktoria_shows");
++        if (showsJson) {
++          const shows = JSON.parse(showsJson) as any[];
++          const activeShowId = localStorage.getItem("viktoria_activeShowId") || shows[0]?.id;
++          const currentShow = shows.find(s => s.id === activeShowId) || shows[0];
++          if (currentShow?.teams && currentShow.teams.length > 0) {
++            return currentShow.teams;
++          }
++        }
++      } catch (e) {
++        console.error("Failed to read teams from localStorage shows", e);
++      }
++      return [
++        { id: "5b78e550-2b96-4743-b401-7035051cdc0f", name: "Shongai", score: 0, color: "#ef4444", emoji: "Mask1", players: [] },
++        { id: "d5eb1687-6a66-4221-8a61-982674921d9e", name: "Johns Hopkins", score: 0, color: "#3b82f6", emoji: "Mask2", players: [] },
++        { id: "3c7389d3-7438-4087-919e-b34904e4fdfc", name: "Wakanda 4Ever", score: 0, color: "#22c55e", emoji: "Mask3", players: [] },
++        { id: "730965ee-bc69-43f0-8f7b-9e2a61117572", name: "Howard U", score: 0, color: "#a855f7", emoji: "Mask4", players: [] }
++      ];
++    }
++
++    return [
++      { id: "team_1", name: "Team 1", score: 0, players: [] },
++      { id: "team_2", name: "Team 2", score: 0, players: [] },
++    ];
++  }, [isRemoteMode, sessionData?.teams, sessionData?.fullShowData?.teams, teams, game.teams, isPreviewOrObserve]);
+ 
+   const [active, setActive] = useState<{
+     category: JeopardyCategory;
+@@ -100,9 +165,35 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+   } | null>(null);
+   const [showAnswer, setShowAnswer] = useState(false);
+   const [usedIds, setUsedIds] = useState<Set<string>>(new Set());
+-  const [currentTeamIndex, setCurrentTeamIndex] = useState<0 | 1>(0);
+-  const [teamScores, setTeamScores] = useState<[number, number]>([0, 0]);
++  const [currentTeamIndex, setCurrentTeamIndex] = useState<number>(0);
++  const [teamScores, setTeamScores] = useState<number[]>(() => {
++    if (teamScoresProp) {
++      return resolvedTeams.map(t => teamScoresProp[t.id] ?? 0);
++    }
++    return resolvedTeams.map(() => 0);
++  });
+   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
++  const [previewViewMode, setPreviewViewMode] = useState<"points" | "question" | "answer">("points");
++
++  // Sudden Death Tie-Breaker Simulator States (Local Preview only)
++  const [isTieBreakerSimActive, setIsTieBreakerSimActive] = useState(false);
++  const [simTopic, setSimTopic] = useState("History");
++  const [simRoundType, setSimRoundType] = useState<"round1" | "round2">("round1");
++  const [simQuestionText, setSimQuestionText] = useState("What is the capital of Nigeria?");
++  // Round 1 MC options
++  const [simOptions, setSimOptions] = useState<string[]>(["Lagos", "Abuja", "Kano"]);
++  const [simCorrectOption, setSimCorrectOption] = useState("B"); // A, B, or C
++  // Round 2 direct answer
++  const [simCorrectAnswer, setSimCorrectAnswer] = useState("Abuja");
++  
++  // Simulator runtime states
++  const [simRevealed, setSimRevealed] = useState(false);
++  const [simWinnerIdx, setSimWinnerIdx] = useState<number | null>(null);
++
++  const [preparedClue, setPreparedClue] = useState("");
++  const [preparedSavedMsg, setPreparedSavedMsg] = useState("");
++  const [observationComment, setObservationComment] = useState("");
++  const [observationSubmittedMsg, setObservationSubmittedMsg] = useState("");
+ 
+   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
+   const [isTimerRunning, setIsTimerRunning] = useState(false);
+@@ -110,14 +201,29 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+   const [activeClue, setActiveClue] = useState<ActiveClueState | null>(null);
+   const [showClueMenu, setShowClueMenu] = useState(false);
+   const initialClueCount = game.cluesPerTeam ?? 2;
+-  const [clueUsage, setClueUsage] = useState<[TeamClueUsage, TeamClueUsage]>(() => [
+-    { remaining: initialClueCount, usedTypes: [] },
+-    { remaining: initialClueCount, usedTypes: [] },
+-  ]);
++  const [clueUsage, setClueUsage] = useState<TeamClueUsage[]>(() => 
++    resolvedTeams.map(() => ({ remaining: initialClueCount, usedTypes: [] }))
++  );
++
++  // Sync teamScores from props
++  useEffect(() => {
++    if (teamScoresProp) {
++      const newScores = resolvedTeams.map(t => teamScoresProp[t.id] ?? 0);
++      setTeamScores(newScores);
++    }
++  }, [teamScoresProp, resolvedTeams]);
++
++  // Keep clueUsage length in sync
++  useEffect(() => {
++    setClueUsage(prev => {
++      if (prev.length === resolvedTeams.length) return prev;
++      return resolvedTeams.map((_, idx) => prev[idx] || { remaining: initialClueCount, usedTypes: [] });
++    });
++  }, [resolvedTeams, initialClueCount]);
+ 
+   // 📡 MISSION 05/06: SYNC STATE FROM FIRESTORE
+   useEffect(() => {
+-    if (!isRemoteMode || !sessionData) return;
++    if (!isSyncActive || !sessionData) return;
+ 
+     // 1. Sync used IDs
+     if (sessionData.usedQuestionIds) {
+@@ -126,21 +232,19 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+ 
+     // 2. Sync Scores
+     if (sessionData.teamScores) {
+-      const teams = Object.keys(sessionData.teamScores).sort();
+-      const s1 = sessionData.teamScores[teams[0]] || 0;
+-      const s2 = sessionData.teamScores[teams[1]] || 0;
+-      setTeamScores([s1, s2]);
++      const newScores = resolvedTeams.map(t => sessionData.teamScores[t.id] ?? 0);
++      setTeamScores(newScores);
+     }
+ 
+     // 3. Sync Answer Reveal
+     if (sessionData.isAnswerRevealed !== undefined) {
+       setShowAnswer(sessionData.isAnswerRevealed);
+     }
+-  }, [sessionData, isRemoteMode]);
++  }, [sessionData, isSyncActive, resolvedTeams]);
+ 
+   // 📡 MISSION 06: QUESTION AUTO-OPENER
+   useEffect(() => {
+-    if (!isRemoteMode || !sessionData?.activeQuestionId) {
++    if (!isSyncActive || !sessionData?.activeQuestionId) {
+       if (!sessionData?.activeQuestionId && active) setActive(null);
+       return;
+     }
+@@ -158,11 +262,11 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+         }
+       });
+     }
+-  }, [sessionData?.activeQuestionId, sessionData?.isAnswerRevealed, isRemoteMode, game.categories]);
++  }, [sessionData?.activeQuestionId, sessionData?.isAnswerRevealed, isSyncActive, game.categories]);
+ 
+   // 📡 MISSION 05/06: LISTEN FOR REMOTE ACTIONS
+   useEffect(() => {
+-    if (!isRemoteMode || !sessionData?.hostCommand) return;
++    if (!isSyncActive || !sessionData?.hostCommand) return;
+     const { type } = sessionData.hostCommand;
+ 
+     if (type === 'correct') {
+@@ -172,10 +276,11 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     } else if (type === 'show_answer' || type === 'REVEAL_ANSWER') {
+       setShowAnswer(true);
+     }
+-  }, [sessionData?.hostCommand, isRemoteMode]);
++  }, [sessionData?.hostCommand, isSyncActive]);
+ 
+   // Timer effect
+   useEffect(() => {
++    if (isObserveOnly) return;
+     if (!isTimerRunning || !active) return;
+ 
+     if (timeLeft === 0) {
+@@ -189,15 +294,14 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     }, 1000);
+ 
+     return () => clearTimeout(timerId);
+-  }, [timeLeft, isTimerRunning, active]);
++  }, [timeLeft, isTimerRunning, active, isObserveOnly]);
+ 
+   useEffect(() => {
+     const count = game.cluesPerTeam ?? 2;
+-    setClueUsage([
+-      { remaining: count, usedTypes: [] },
+-      { remaining: count, usedTypes: [] },
+-    ]);
+-  }, [game.id, game.cluesPerTeam]);
++    setClueUsage(
++      resolvedTeams.map(() => ({ remaining: count, usedTypes: [] }))
++    );
++  }, [game.id, game.cluesPerTeam, resolvedTeams]);
+ 
+ 
+   useEffect(() => {
+@@ -207,6 +311,63 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     }
+   }, [active]);
+ 
++  useEffect(() => {
++    if (active?.question.id) {
++      const local = localStorage.getItem(`viktoria_prepared_clue_${active.question.id}`) || "";
++      const remote = sessionData?.preparedClues?.[active.question.id] || "";
++      setPreparedClue(remote || local);
++      setPreparedSavedMsg("");
++      setObservationComment("");
++      setObservationSubmittedMsg("");
++    }
++  }, [active?.question.id, sessionData?.preparedClues]);
++
++  const handleSavePreparedClue = () => {
++    if (!active?.question.id) return;
++    localStorage.setItem(`viktoria_prepared_clue_${active.question.id}`, preparedClue);
++    setPreparedSavedMsg("Clue saved successfully!");
++    setTimeout(() => setPreparedSavedMsg(""), 3000);
++
++    if (isSyncActive && sessionData) {
++      const currentClues = sessionData.preparedClues || {};
++      updateSession({
++        preparedClues: {
++          ...currentClues,
++          [active.question.id]: preparedClue
++        }
++      });
++    }
++  };
++
++  const handleSubmitObservation = () => {
++    if (!active?.question.id || !observationComment.trim()) return;
++
++    const judgeName = localStorage.getItem('viktoria_elder_name') || 'Judge';
++    const newObs = {
++      id: crypto.randomUUID(),
++      judgeName,
++      questionId: active.question.id,
++      categoryName: active.category.name,
++      questionText: active.question.question || "No clue text",
++      comment: observationComment.trim(),
++      timestamp: new Date().toISOString()
++    };
++
++    const localObs = JSON.parse(localStorage.getItem('viktoria_observations') || '[]');
++    localStorage.setItem('viktoria_observations', JSON.stringify([newObs, ...localObs]));
++
++    if (isSyncActive && sessionData) {
++      const currentObs = sessionData.observations || [];
++      updateSession({
++        observations: [newObs, ...currentObs]
++      });
++    }
++
++    setObservationComment("");
++    setObservationSubmittedMsg("Observation submitted successfully!");
++    setTimeout(() => setObservationSubmittedMsg(""), 3000);
++  };
++
+   const allPoints = useMemo(() => {
+     const pts = new Set<number>();
+     game.categories.forEach((cat) =>
+@@ -218,7 +379,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+   const markUsed = (id: string) => {
+     const next = new Set(usedIds).add(id);
+     setUsedIds(next);
+-    if (isRemoteMode) {
++    if (isSyncActive) {
+       updateSession({ usedQuestionIds: Array.from(next) });
+     }
+   };
+@@ -231,7 +392,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     setActiveClue(null);
+     setShowClueMenu(false);
+ 
+-    if (isRemoteMode) {
++    if (isSyncActive) {
+       updateSession({
+         activeQuestionId: null,
+         activeCategoryId: null,
+@@ -259,10 +420,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     }, durationMs); // Increased timeout for animations
+   };
+ 
+-  const advanceTurnAfterResolution = (result: "correct" | "wrong", basis: 0 | 1) => {
++  const advanceTurnAfterResolution = (result: "correct" | "wrong", basis: number) => {
+     const shouldSwitch =
+       result === "wrong" || game.turnMode === JeopardyTurnMode.ALTERNATE_AFTER_QUESTION;
+-    const nextTeam = shouldSwitch ? otherTeam(basis) : basis;
++    const nextTeam = shouldSwitch ? (basis + 1) % resolvedTeams.length : basis;
+     setCurrentTeamIndex(nextTeam);
+     setHasReboundAttempted(false);
+     setActiveClue(null);
+@@ -274,13 +435,13 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     const pts = active.question.points || 0;
+     const answeringTeam = currentTeamIndex;
+     const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : answeringTeam;
+-    const newScores = [...teamScores] as [number, number];
++    const newScores = [...teamScores];
+ 
+     if (activeClue?.type === "ASK_OTHER_TEAM" && activeClue.targetTeam !== undefined) {
+       const half = Math.ceil(pts / 2);
+       const remainder = pts - half;
+-      newScores[activeClue.usedBy] += half;
+-      newScores[activeClue.targetTeam] += remainder;
++      newScores[activeClue.usedBy] = (newScores[activeClue.usedBy] || 0) + half;
++      newScores[activeClue.targetTeam] = (newScores[activeClue.targetTeam] || 0) + remainder;
+       setTeamScores(newScores);
+ 
+       markUsed(active.question.id);
+@@ -290,18 +451,20 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+       return;
+     }
+ 
+-    newScores[answeringTeam] += pts;
++    newScores[answeringTeam] = (newScores[answeringTeam] || 0) + pts;
+     setTeamScores(newScores);
+ 
+     // 📡 SYNC SCORE BACK TO FIRESTORE
+-    if (isRemoteMode && sessionData?.teamScores) {
+-      const teams = Object.keys(sessionData.teamScores).sort();
+-      updateSession({
+-        teamScores: {
+-          ...sessionData.teamScores,
+-          [teams[answeringTeam]]: newScores[answeringTeam]
+-        }
+-      });
++    if (isSyncActive && sessionData?.teamScores) {
++      const targetTeamId = resolvedTeams[answeringTeam]?.id;
++      if (targetTeamId) {
++        updateSession({
++          teamScores: {
++            ...sessionData.teamScores,
++            [targetTeamId]: newScores[answeringTeam]
++          }
++        });
++      }
+     }
+ 
+     markUsed(active.question.id);
+@@ -317,14 +480,14 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+ 
+     if (reboundsAllowed && !hasReboundAttempted) {
+       setHasReboundAttempted(true);
+-      const nextTeam = otherTeam(currentTeamIndex);
++      const nextTeam = (currentTeamIndex + 1) % resolvedTeams.length;
+       setCurrentTeamIndex(nextTeam);
+       setIsTimerRunning(false);
+       setTimeLeft(TIMER_DURATION);
+       setIsTimerRunning(true);
+       showFeedback("wrong", { closeAfter: false, durationMs: 1200 });
+ 
+-      if (isRemoteMode) {
++      if (isSyncActive) {
+         updateSession({ currentTeamIndex: nextTeam, hasReboundAttempted: true });
+       }
+       return;
+@@ -337,16 +500,16 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : currentTeamIndex;
+     advanceTurnAfterResolution("wrong", turnBasis);
+ 
+-    if (isRemoteMode) {
++    if (isSyncActive) {
+       updateSession({
+         activeQuestionId: null,
+         hasReboundAttempted: false,
+-        currentTeamIndex: (turnBasis === 0 ? 1 : 0) // Basic flip for wrong answer
++        currentTeamIndex: (turnBasis + 1) % resolvedTeams.length
+       });
+     }
+   };
+ 
+-  const teamLabel = (index: 0 | 1) => game.teams?.[index] || `Team ${index + 1}`;
++  const teamLabel = (index: number) => resolvedTeams[index]?.name || `Team ${index + 1}`;
+   const explanationPlacement = active?.question.explanationPlacement || "WITH_ANSWER";
+ 
+   const getHostCue = () => {
+@@ -363,7 +526,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     if (!active) return;
+     const teamIdx = currentTeamIndex;
+     const usage = clueUsage[teamIdx];
+-    if (usage.remaining <= 0 || usage.usedTypes.includes(type)) return;
++    if (!usage || usage.remaining <= 0 || usage.usedTypes.includes(type)) return;
+ 
+     const updatedTeam: TeamClueUsage = {
+       remaining: Math.max(0, usage.remaining - 1),
+@@ -371,14 +534,11 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     };
+ 
+     setClueUsage((prev) =>
+-      [
+-        teamIdx === 0 ? updatedTeam : prev[0],
+-        teamIdx === 1 ? updatedTeam : prev[1],
+-      ] as [TeamClueUsage, TeamClueUsage]
++      prev.map((u, idx) => (idx === teamIdx ? updatedTeam : u))
+     );
+ 
+     if (type === "ASK_OTHER_TEAM") {
+-      const helperTeam = otherTeam(teamIdx);
++      const helperTeam = (teamIdx + 1) % resolvedTeams.length;
+       setActiveClue({ type, usedBy: teamIdx, targetTeam: helperTeam });
+       setCurrentTeamIndex(helperTeam);
+       setHasReboundAttempted(false);
+@@ -403,7 +563,19 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     setActiveClue(null);
+     setShowClueMenu(false);
+     setTimeLeft(TIMER_DURATION);
+-    setIsTimerRunning(true);
++    setIsTimerRunning(!isObserveOnly);
++
++    if (isSyncActive) {
++      updateSession({
++        activeQuestionId: question.id,
++        activeCategoryId: category.id,
++        isAnswerRevealed: false,
++        isTimerRunning: true,
++        timeLeft: TIMER_DURATION,
++        hasReboundAttempted: false,
++        currentTeamIndex: currentTeamIndex
++      });
++    }
+   };
+ 
+   // Debug: log the media URL we try to render for troubleshooting broken images
+@@ -419,8 +591,20 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+   }, [active?.question.questionMediaUrl, active?.question.questionMediaType]);
+ 
+   useEffect(() => {
++    if (isPreviewOrObserve) return;
++
+     const onKey = (e: KeyboardEvent) => {
+       if (!active) return;
++
++      const target = e.target as HTMLElement;
++      if (
++        target.tagName === "INPUT" ||
++        target.tagName === "TEXTAREA" ||
++        target.isContentEditable
++      ) {
++        return;
++      }
++
+       if (e.key === "r" || e.key === "R") {
+         e.preventDefault();
+         handleCorrect();
+@@ -432,10 +616,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     };
+     window.addEventListener("keydown", onKey);
+     return () => window.removeEventListener("keydown", onKey);
+-  }, [active, currentTeamIndex]);
++  }, [active, currentTeamIndex, isPreviewOrObserve]);
+ 
+   return (
+-    <div className="h-full flex flex-col bg-gradient-to-b from-blue-950 to-slate-900 text-white relative">
++    <div className="h-full w-full min-w-0 flex flex-col bg-gradient-to-b from-blue-950 to-slate-900 text-white relative">
+       <header className="flex items-center justify-between p-4 border-b border-slate-700">
+         <div>
+           <h1 className="text-3xl font-bold tracking-wide">Jeopardy</h1>
+@@ -444,24 +628,65 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+           </p>
+         </div>
+         <div className="flex items-center gap-4">
+-          <div className="flex items-center gap-3 text-sm">
+-            {([0, 1] as const).map((index) => (
+-              <div
+-                key={index}
+-                className={`px-3 py-1 rounded-lg border transition-all ${currentTeamIndex === index
+-                  ? "bg-yellow-400 text-black border-yellow-300 scale-110"
+-                  : "bg-slate-800 text-slate-200 border-slate-600"
++          {isPreviewOrObserve && window.electronAPI && (
++            <div className="flex bg-slate-800/80 border border-white/10 p-1 rounded-xl items-center gap-1 shadow-md">
++              {(["points", "question", "answer"] as const).map((mode) => (
++                <button
++                  key={mode}
++                  onClick={() => {
++                    setIsTieBreakerSimActive(false);
++                    setPreviewViewMode(mode);
++                  }}
++                  className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all active:scale-95 ${
++                    !isTieBreakerSimActive && previewViewMode === mode
++                      ? "bg-[#fca311] text-black font-black"
++                      : "text-slate-400 hover:text-white"
+                   }`}
+-              >
+-                <div className="flex items-baseline gap-1">
+-                  <span className="font-bold">{teamLabel(index)}</span>
+-                  <span>${teamScores[index]}</span>
+-                </div>
+-                <div className="text-[11px] text-yellow-200">
+-                  Clues left: {clueUsage[index]?.remaining ?? 0}
++                >
++                  {mode}
++                </button>
++              ))}
++            </div>
++          )}
++
++          {isPreview && window.electronAPI && (
++            <button
++              onClick={() => {
++                setIsTieBreakerSimActive(!isTieBreakerSimActive);
++                setSimRevealed(false);
++                setSimWinnerIdx(null);
++              }}
++              className={`px-3.5 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-xl transition-all border active:scale-95 ${
++                isTieBreakerSimActive
++                  ? "bg-red-600 text-white border-red-500 shadow-[0_0_12px_rgba(220,38,38,0.4)]"
++                  : "bg-white/5 text-slate-300 hover:text-white border-white/10"
++              }`}
++            >
++              ⚡ {isTieBreakerSimActive ? "CLOSE SIMULATOR" : "TIE-BREAKER PREVIEW"}
++            </button>
++          )}
++
++          <div className="flex items-center gap-3 text-sm">
++            {resolvedTeams.map((team, index) => {
++              const teamName = team.name || game.teams?.[index] || `Team ${index + 1}`;
++              return (
++                <div
++                  key={team.id || index}
++                  className={`px-3 py-1 rounded-lg border transition-all ${currentTeamIndex === index
++                    ? "bg-yellow-400 text-black border-yellow-300 scale-110"
++                    : "bg-slate-800 text-slate-200 border-slate-600"
++                    }`}
++                >
++                  <div className="flex items-baseline gap-1">
++                    <span className="font-bold">{teamName}</span>
++                    <span>{teamScores[index] ?? 0}</span>
++                  </div>
++                  <div className="text-[11px] text-yellow-200">
++                    Clues left: {clueUsage[index]?.remaining ?? 0}
++                  </div>
+                 </div>
+-              </div>
+-            ))}
++              );
++            })}
+           </div>
+           <button
+             onClick={onExit}
+@@ -472,70 +697,346 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+         </div>
+       </header>
+ 
+-      <main className="flex-1 overflow-auto p-4">
+-        {game.categories.length === 0 ? (
+-          <div className="h-full flex items-center justify-center text-slate-300">
+-            No categories configured for this game.
+-          </div>
+-        ) : (
+-          <div
+-            className="grid gap-2"
+-            style={{
+-              gridTemplateColumns: `repeat(${game.categories.length}, minmax(180px, 1fr))`,
+-            }}
+-          >
+-            {/* Headers */}
+-            {game.categories.map((cat) => (
+-              <div
+-                key={cat.id}
+-                className="bg-slate-800 text-yellow-300 p-2 rounded-t-lg h-20 flex items-center justify-center text-center font-bold uppercase tracking-wide border-b border-yellow-500"
+-              >
+-                <span className="px-2">{cat.name || "Category"}</span>
++      {isTieBreakerSimActive ? (
++        <div className="flex-1 flex overflow-hidden">
++          {/* Simulator Control Panel Side Drawer */}
++          <div className="w-80 bg-slate-950/80 border-r border-white/10 p-5 overflow-y-auto space-y-5 flex flex-col select-none">
++            <div>
++              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#fca311]">Simulator Controls</span>
++              <h2 className="text-lg font-black uppercase text-white tracking-tight">Configure Question</h2>
++            </div>
++            
++            <div className="space-y-4 flex-1">
++              {/* Topic Input */}
++              <div className="space-y-1">
++                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Topic</label>
++                <input
++                  type="text"
++                  value={simTopic}
++                  onChange={(e) => setSimTopic(e.target.value)}
++                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#fca311]"
++                  placeholder="e.g. History, Geography..."
++                />
+               </div>
+-            ))}
+ 
+-            {/* Cells by point value */}
+-            {allPoints.map((points) =>
+-              game.categories.map((cat) => {
+-                const q = cat.questions.find((qq) => qq.points === points);
+-                if (!q) {
+-                  return (
+-                    <div
+-                      key={`${cat.id}-${points}`}
+-                      className="h-20 rounded-b-lg bg-slate-900/40 border border-slate-700/40"
+-                    />
+-                  );
+-                }
++              {/* Round Type Switch */}
++              <div className="space-y-1">
++                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Round Mechanism</label>
++                <div className="grid grid-cols-2 gap-2 bg-slate-900 p-1 border border-white/10 rounded-xl">
++                  {(["round1", "round2"] as const).map((r) => (
++                    <button
++                      key={r}
++                      onClick={() => setSimRoundType(r)}
++                      className={`py-1 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
++                        simRoundType === r
++                          ? "bg-slate-800 text-white shadow-inner"
++                          : "text-slate-500 hover:text-slate-300"
++                      }`}
++                    >
++                      {r === "round1" ? "R1 (Options)" : "R2 (Open)"}
++                    </button>
++                  ))}
++                </div>
++              </div>
+ 
+-                const isUsed = usedIds.has(q.id);
++              {/* Question Text */}
++              <div className="space-y-1">
++                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Question Text</label>
++                <textarea
++                  value={simQuestionText}
++                  onChange={(e) => setSimQuestionText(e.target.value)}
++                  className="w-full h-24 bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#fca311] resize-none"
++                  placeholder="Type the sudden death question..."
++                />
++              </div>
+ 
+-                return (
++              {simRoundType === "round1" ? (
++                // Round 1 options configuration
++                <div className="space-y-3">
++                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Multiple Choice Options</label>
++                  {["A", "B", "C"].map((letter, idx) => (
++                    <div key={letter} className="flex items-center gap-2">
++                      <span className="text-xs font-black text-slate-500 w-4">{letter}</span>
++                      <input
++                        type="text"
++                        value={simOptions[idx] || ""}
++                        onChange={(e) => {
++                          const newOpts = [...simOptions];
++                          newOpts[idx] = e.target.value;
++                          setSimOptions(newOpts);
++                        }}
++                        className="flex-1 bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-[#fca311]"
++                        placeholder={`Option ${letter}`}
++                      />
++                    </div>
++                  ))}
++                  
++                  {/* Correct option selector */}
++                  <div className="space-y-1 pt-1">
++                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Correct Option</label>
++                    <div className="grid grid-cols-3 gap-2 bg-slate-900 p-1 border border-white/10 rounded-xl">
++                      {["A", "B", "C"].map((letter) => (
++                        <button
++                          key={letter}
++                          onClick={() => setSimCorrectOption(letter)}
++                          className={`py-1 text-[10px] font-black rounded-lg transition-all ${
++                            simCorrectOption === letter
++                              ? "bg-emerald-600 text-white font-black"
++                              : "text-slate-500 hover:text-slate-300"
++                          }`}
++                        >
++                          {letter}
++                        </button>
++                      ))}
++                    </div>
++                  </div>
++                </div>
++              ) : (
++                // Round 2 direct answer
++                <div className="space-y-1">
++                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Predetermined Answer</label>
++                  <input
++                    type="text"
++                    value={simCorrectAnswer}
++                    onChange={(e) => setSimCorrectAnswer(e.target.value)}
++                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#fca311]"
++                    placeholder="e.g. Abuja"
++                  />
++                </div>
++              )}
++            </div>
++
++            <div className="pt-4 border-t border-white/10 flex flex-col gap-2">
++              <button
++                onClick={() => {
++                  setSimRevealed(false);
++                  setSimWinnerIdx(null);
++                }}
++                className="w-full py-2 bg-slate-800 hover:bg-slate-700 border border-white/5 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95"
++              >
++                Reset State
++              </button>
++            </div>
++          </div>
++
++          {/* Simulator Contestant TV View Area */}
++          <div className="flex-1 bg-gradient-to-br from-[#0c1020] via-[#05070f] to-[#010204] text-white p-8 relative overflow-hidden flex flex-col items-center justify-center">
++            {/* Background design elements */}
++            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(252,163,17,0.06)_0%,transparent_80%)] pointer-events-none" />
++            
++            <div className="w-full max-w-4xl space-y-10 text-center relative z-10">
++              <header className="space-y-2 animate-fade-in">
++                <div className="flex items-center justify-center gap-3.5 flex-wrap">
++                  <span className="inline-block px-5 py-1.5 bg-red-500/10 border border-red-500/30 text-red-500 rounded-full text-base font-black uppercase tracking-[0.2em] shadow-[0_0_15px_rgba(239,68,68,0.15)]">
++                    ⚡ SUDDEN DEATH TIE-BREAKER ⚡
++                  </span>
++                  {simTopic && (
++                    <span className="inline-block px-4 py-1.5 bg-purple-500/15 border border-purple-500/30 text-purple-400 rounded-full text-sm font-black uppercase tracking-[0.15em] shadow-[0_0_12px_rgba(168,85,247,0.12)]">
++                      Topic: {simTopic}
++                    </span>
++                  )}
++                </div>
++                <h2 className="text-xl font-bold text-slate-400 uppercase tracking-wide">
++                  {simRoundType === "round1" ? "Round 1: Multiple-Choice Shootout" : "Round 2: Direct/Open Challenge"}
++                </h2>
++              </header>
++
++              {/* Question card */}
++              <div className="bg-[#14213d]/20 border border-white/10 rounded-3xl p-8 md:p-10 shadow-2xl relative overflow-hidden backdrop-blur-md">
++                <div className="absolute top-0 left-0 w-1.5 h-full bg-[#fca311]" />
++                <h1 className="text-3xl md:text-4xl font-extrabold text-white leading-snug">
++                  {simQuestionText || "No question configured yet."}
++                </h1>
++              </div>
++
++              {/* Options or Answer */}
++              {simRoundType === "round1" ? (
++                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto w-full">
++                  {["A", "B", "C"].map((letter, idx) => {
++                    const isCorrect = simCorrectOption === letter;
++                    const isRevealed = simRevealed;
++
++                    return (
++                      <div
++                        key={letter}
++                        className={`p-5 rounded-2xl border text-lg font-black flex items-center gap-3.5 transition-all shadow-lg ${
++                          isRevealed
++                            ? isCorrect
++                              ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.25)]"
++                              : "bg-black/40 border-white/5 text-slate-600 opacity-40"
++                            : "bg-white/5 border-white/10 text-white hover:border-[#fca311]/50"
++                        }`}
++                      >
++                        <span className={`text-xs px-2.5 py-0.5 rounded-lg font-black ${
++                          isRevealed && isCorrect
++                            ? "bg-emerald-500 text-black"
++                            : "bg-white/10 text-slate-300"
++                        }`}>{letter}</span>
++                        <div className="text-left font-bold text-sm">{simOptions[idx] || `Option ${letter}`}</div>
++                      </div>
++                    );
++                  })}
++                </div>
++              ) : (
++                simRevealed && (
++                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-3xl p-5 max-w-md mx-auto shadow-2xl animate-scale-up">
++                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400 block mb-1">Predetermined Answer</span>
++                    <div className="text-2xl font-extrabold text-white uppercase tracking-wide">
++                      {simCorrectAnswer || "No answer configured."}
++                    </div>
++                  </div>
++                )
++              )}
++
++              {/* Interactive buttons in preview mode to simulate host/elders evaluation */}
++              <div className="pt-6 border-t border-white/5 flex flex-wrap justify-center items-center gap-4">
++                {!simRevealed && (
+                   <button
+-                    key={`${cat.id}-${points}`}
+-                    disabled={isUsed}
+-                    onClick={() => openQuestion(cat, q)}
+-                    className={`h-28 flex items-center justify-center font-extrabold text-4xl rounded-b-lg border shadow-md transition-all ${isUsed
+-                      ? "bg-white p-1 cursor-not-allowed"
+-                      : "bg-blue-700 hover:bg-blue-500 text-yellow-300 border-blue-400 hover:scale-[1.02]"
+-                      }`}
+-                    title={isUsed ? "Question answered" : `${cat.name} · $${points}`}
++                    onClick={() => setSimRevealed(true)}
++                    className="px-6 py-2.5 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95 shadow-md"
+                   >
+-                    {isUsed ? (
+-                      <img
+-                        src={resolveMediaUrl("images/elebilogo.png")}
+-                        alt="Question answered"
+-                        className="h-full w-full object-contain"
+-                      />
+-                    ) : (
+-                      `$${points}`
+-                    )}
++                    Reveal Correct Answer
+                   </button>
+-                );
+-              })
++                )}
++
++                <div className="flex items-center gap-2.5">
++                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 mr-1.5">Declare Winner:</span>
++                  {resolvedTeams.map((team, idx) => {
++                    const name = team.name || game.teams?.[idx] || `Team ${idx + 1}`;
++                    return (
++                      <button
++                        key={team.id || idx}
++                        onClick={() => {
++                          setSimRevealed(true);
++                          setSimWinnerIdx(idx);
++                        }}
++                        className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95"
++                      >
++                        {name}
++                      </button>
++                    );
++                  })}
++                </div>
++              </div>
++            </div>
++
++            {/* Victory Celebration Overlay */}
++            {simWinnerIdx !== null && (
++              <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center p-8 text-center z-40 animate-fade-in select-none">
++                <div className="space-y-6 max-w-md">
++                  <div
++                    className="w-24 h-24 rounded-full flex items-center justify-center mx-auto shadow-2xl border-4 text-4xl animate-pulse"
++                    style={{
++                      borderColor: resolvedTeams[simWinnerIdx]?.color || "#fbbf24",
++                      backgroundColor: `${resolvedTeams[simWinnerIdx]?.color || "#fbbf24"}20`
++                    }}
++                  >
++                    🏆
++                  </div>
++                  <div className="space-y-2">
++                    <span className="text-red-500 font-black text-xs uppercase tracking-[0.3em] block">TIE-BREAKER CHAMPION</span>
++                    <h1
++                      className="text-4xl md:text-5xl font-black uppercase tracking-tight"
++                      style={{ color: resolvedTeams[simWinnerIdx]?.color || "#fbbf24" }}
++                    >
++                      {resolvedTeams[simWinnerIdx]?.name || game.teams?.[simWinnerIdx] || `Team ${simWinnerIdx + 1}`}
++                    </h1>
++                  </div>
++                  <p className="text-sm text-slate-400 leading-relaxed">
++                    Defeated their opponent in Sudden Death and advanced to the next stage!
++                  </p>
++                  
++                  <div className="pt-4 flex justify-center gap-3">
++                    <button
++                      onClick={() => {
++                        setSimRevealed(false);
++                        setSimWinnerIdx(null);
++                      }}
++                      className="px-5 py-2.5 bg-white/10 hover:bg-white/15 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95"
++                    >
++                      Test Again
++                    </button>
++                    <button
++                      onClick={() => {
++                        setIsTieBreakerSimActive(false);
++                        setSimWinnerIdx(null);
++                      }}
++                      className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95 shadow-lg"
++                    >
++                      Close Simulation
++                    </button>
++                  </div>
++                </div>
++              </div>
+             )}
+           </div>
+-        )}
+-      </main>
++        </div>
++      ) : (
++        <main className="flex-1 overflow-auto p-4 w-full min-w-0">
++          {game.categories.length === 0 ? (
++            <div className="h-full flex items-center justify-center text-slate-300">
++              No categories configured for this game.
++            </div>
++          ) : (
++            <div
++              className="grid gap-2 w-full min-w-0"
++              style={{
++                gridTemplateColumns: `repeat(${game.categories.length}, minmax(180px, 1fr))`,
++              }}
++            >
++              {/* Headers */}
++              {game.categories.map((cat) => (
++                <div
++                  key={cat.id}
++                  className="bg-slate-800 text-yellow-300 p-2 rounded-t-lg h-20 flex items-center justify-center text-center font-bold uppercase tracking-wide border-b border-yellow-500 text-base"
++                >
++                  <span className="px-2 line-clamp-2">{cat.name || "Category"}</span>
++                </div>
++              ))}
++
++              {/* Cells by point value */}
++              {allPoints.map((points) =>
++                game.categories.map((cat) => {
++                  const q = cat.questions.find((qq) => qq.points === points);
++                  if (!q) {
++                    return (
++                      <div
++                        key={`${cat.id}-${points}`}
++                        className="h-20 rounded-b-lg bg-slate-900/40 border border-slate-700/40"
++                      />
++                    );
++                  }
++
++                  const isUsed = usedIds.has(q.id);
++
++                  return (
++                    <button
++                      key={`${cat.id}-${points}`}
++                      disabled={isUsed && !isObserveOnly}
++                      onClick={() => openQuestion(cat, q)}
++                      className={`h-28 flex items-center justify-center font-extrabold text-4xl rounded-b-lg border shadow-md transition-all ${isUsed
++                        ? "bg-white p-1 cursor-not-allowed"
++                        : "bg-blue-700 hover:bg-blue-500 text-yellow-300 border-blue-400 hover:scale-[1.02]"
++                        }`}
++                      title={isUsed ? "Question answered" : `${cat.name} · ${points}`}
++                    >
++                      {isUsed ? (
++                        <img
++                          src={resolveMediaUrl("images/elebilogo.png")}
++                          alt="Question answered"
++                          className="h-full w-full object-contain"
++                        />
++                      ) : (
++                        `${points}`
++                      )}
++                    </button>
++                  );
++                })
++              )}
++            </div>
++          )}
++        </main>
++      )}
+ 
+       {/* Active clue modal */}
+       {active && (
+@@ -546,9 +1047,9 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+                 <h2 className="text-3xl font-bold text-yellow-300 uppercase">
+                   {active.category.name}
+                 </h2>
+-                <p className="text-xl text-slate-300">${active.question.points}</p>
++                <p className="text-xl text-slate-300">{active.question.points} points</p>
+               </div>
+-              <TimerCircle timeLeft={timeLeft} duration={TIMER_DURATION} />
++              {!isObserveOnly && <TimerCircle timeLeft={timeLeft} duration={TIMER_DURATION} />}
+               <button
+                 onClick={clearQuestionState}
+                 className="text-lg px-4 py-2 rounded bg-slate-700 hover:bg-slate-600"
+@@ -615,7 +1116,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+                       </div>
+                     )}
+ 
+-                  {hasReboundAttempted && (game.allowRebounds ?? true) && !activeClue && (
++                  {!isObserveOnly && hasReboundAttempted && (game.allowRebounds ?? true) && !activeClue && (
+                     <div className="bg-amber-900/40 rounded-xl p-3 border border-amber-500/60 w-full text-center">
+                       <p className="text-amber-100 font-semibold">
+                         Rebound! {teamLabel(currentTeamIndex)} gets a chance to answer.
+@@ -623,7 +1124,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+                     </div>
+                   )}
+ 
+-                  {activeClue && (
++                  {!isObserveOnly && activeClue && (
+                     <div className="bg-blue-900/40 rounded-xl p-4 border border-blue-500/60 w-full text-center space-y-1">
+                       <p className="text-blue-100 font-semibold">
+                         {activeClue.type === "CALL_FRIEND" &&
+@@ -641,7 +1142,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+                     </div>
+                   )}
+ 
+-                  {showAnswer && (
++                  {(showAnswer || isObserveOnly) && (
+                     <div className="bg-emerald-900/60 rounded-xl p-6 border border-emerald-500 w-full text-center">
+                       <p className="text-lg text-emerald-300 font-semibold mb-2">
+                         Correct Response:
+@@ -697,93 +1198,105 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+               )}
+             </div>
+ 
+-            <footer className="relative flex flex-col gap-3 pt-4 shrink-0">
+-              <div className="flex flex-wrap justify-end items-center gap-3">
+-                <div className="flex flex-col mr-auto gap-2">
+-                  <span className="text-sm text-slate-400">
+-                    Hotkeys: R = Correct, W = Wrong
+-                  </span>
+-                  <div className="flex items-center gap-2">
+-                    <span className="text-sm text-slate-200">
+-                      {teamLabel(currentTeamIndex)} clues left:{" "}
+-                      {clueUsage[currentTeamIndex]?.remaining ?? 0}
++            {isObserveOnly ? (
++              <footer className="relative flex justify-end pt-4 shrink-0">
++                <button
++                  onClick={clearQuestionState}
++                  className="px-8 py-3 rounded-lg bg-slate-700 text-white font-semibold hover:bg-slate-600 text-lg"
++                >
++                  Close
++                </button>
++              </footer>
++            ) : (
++              <footer className="relative flex flex-col gap-3 pt-4 shrink-0">
++                <div className="flex flex-wrap justify-end items-center gap-3">
++                  <div className="flex flex-col mr-auto gap-2">
++                    <span className="text-sm text-slate-400">
++                      Hotkeys: R = Correct, W = Wrong
+                     </span>
++                    <div className="flex items-center gap-2">
++                      <span className="text-sm text-slate-200">
++                        {teamLabel(currentTeamIndex)} clues left:{" "}
++                        {clueUsage[currentTeamIndex]?.remaining ?? 0}
++                      </span>
++                      <button
++                        onClick={() => setShowClueMenu((v) => !v)}
++                        disabled={(clueUsage[currentTeamIndex]?.remaining ?? 0) <= 0}
++                        className="px-3 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
++                      >
++                        Use clue
++                      </button>
++                    </div>
++                  </div>
++                  {!showAnswer && (
+                     <button
+-                      onClick={() => setShowClueMenu((v) => !v)}
+-                      disabled={(clueUsage[currentTeamIndex]?.remaining ?? 0) <= 0}
+-                      className="px-3 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
++                      onClick={() => setShowAnswer(true)}
++                      className="px-6 py-3 rounded-lg bg-yellow-400 text-black font-semibold hover:bg-yellow-300 text-lg"
+                     >
+-                      Use clue
++                      Show Answer
+                     </button>
+-                  </div>
+-                </div>
+-                {!showAnswer && (
++                  )}
+                   <button
+-                    onClick={() => setShowAnswer(true)}
+-                    className="px-6 py-3 rounded-lg bg-yellow-400 text-black font-semibold hover:bg-yellow-300 text-lg"
++                    onClick={() => handleWrong()}
++                    className="px-6 py-3 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-500 text-lg"
+                   >
+-                    Show Answer
++                    Wrong (W)
++                  </button>
++                  <button
++                    onClick={handleCorrect}
++                    className="px-6 py-3 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 text-lg"
++                  >
++                    Correct (R)
+                   </button>
+-                )}
+-                <button
+-                  onClick={() => handleWrong()}
+-                  className="px-6 py-3 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-500 text-lg"
+-                >
+-                  Wrong (W)
+-                </button>
+-                <button
+-                  onClick={handleCorrect}
+-                  className="px-6 py-3 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 text-lg"
+-                >
+-                  Correct (R)
+-                </button>
+-              </div>
+-              {showClueMenu && (
+-                <div className="absolute bottom-full left-0 right-0 mb-3 w-full bg-slate-800 border border-blue-500/40 rounded-lg p-4 space-y-2 shadow-2xl z-10">
+-                  <p className="text-xs text-blue-200 uppercase tracking-wide font-semibold">
+-                    Choose a clue
+-                  </p>
+-                  <div className="grid md:grid-cols-3 gap-2">
+-                    {[
+-                      {
+-                        type: "CALL_FRIEND" as ClueType,
+-                        label: "Call a friend",
+-                        desc: "Add a bit of extra time while you phone a friend.",
+-                      },
+-                      {
+-                        type: "ASK_HOST" as ClueType,
+-                        label: "Ask the host for a cue",
+-                        desc: "Reveal a quick hint from the host.",
+-                      },
+-                      {
+-                        type: "ASK_OTHER_TEAM" as ClueType,
+-                        label: "Ask the other team & split points",
+-                        desc: "The other team answers; points are shared if correct.",
+-                      },
+-                    ].map(({ type, label, desc }) => {
+-                      const used = clueUsage[currentTeamIndex]?.usedTypes.includes(type);
+-                      const disabled = used || (clueUsage[currentTeamIndex]?.remaining ?? 0) <= 0;
+-                      return (
+-                        <button
+-                          key={type}
+-                          onClick={() => useClue(type)}
+-                          disabled={disabled}
+-                          className={`text-left bg-slate-700 rounded-lg p-3 border ${disabled ? "border-slate-600 opacity-50 cursor-not-allowed" : "border-blue-500 hover:bg-slate-600"
+-                            }`}
+-                        >
+-                          <div className="font-semibold text-white">{label}</div>
+-                          <p className="text-xs text-slate-200">{desc}</p>
+-                          {used && <span className="text-[11px] text-red-200">Used</span>}
+-                        </button>
+-                      );
+-                    })}
+-                  </div>
+                 </div>
+-              )}
+-            </footer>
++                {showClueMenu && (
++                  <div className="absolute bottom-full left-0 right-0 mb-3 w-full bg-slate-800 border border-blue-500/40 rounded-lg p-4 space-y-2 shadow-2xl z-10">
++                    <p className="text-xs text-blue-200 uppercase tracking-wide font-semibold">
++                      Choose a clue
++                    </p>
++                    <div className="grid md:grid-cols-3 gap-2">
++                      {[
++                        {
++                          type: "CALL_FRIEND" as ClueType,
++                          label: "Call a friend",
++                          desc: "Add a bit of extra time while you phone a friend.",
++                        },
++                        {
++                          type: "ASK_HOST" as ClueType,
++                          label: "Ask the host for a cue",
++                          desc: "Reveal a quick hint from the host.",
++                        },
++                        {
++                          type: "ASK_OTHER_TEAM" as ClueType,
++                          label: "Ask the other team & split points",
++                          desc: "The other team answers; points are shared if correct.",
++                        },
++                      ].map(({ type, label, desc }) => {
++                        const used = clueUsage[currentTeamIndex]?.usedTypes.includes(type);
++                        const disabled = used || (clueUsage[currentTeamIndex]?.remaining ?? 0) <= 0;
++                        return (
++                          <button
++                            key={type}
++                            onClick={() => useClue(type)}
++                            disabled={disabled}
++                            className={`text-left bg-slate-700 rounded-lg p-3 border ${disabled ? "border-slate-600 opacity-50 cursor-not-allowed" : "border-blue-500 hover:bg-slate-600"
++                              }`}
++                          >
++                            <div className="font-semibold text-white">{label}</div>
++                            <p className="text-xs text-slate-200">{desc}</p>
++                            {used && <span className="text-[11px] text-red-200">Used</span>}
++                          </button>
++                        );
++                      })}
++                    </div>
++                  </div>
++                )}
++              </footer>
++            )}
+           </div>
+         </div>
+       )}
++
+       {feedback && <FeedbackOverlay type={feedback} />}
+     </div>
+   );

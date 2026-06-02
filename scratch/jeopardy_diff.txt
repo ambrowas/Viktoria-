@@ -1,0 +1,804 @@
+diff --git a/src/screens/games/JeopardyGame.tsx b/src/screens/games/JeopardyGame.tsx
+index b2f3a59..7a52e71 100644
+--- a/src/screens/games/JeopardyGame.tsx
++++ b/src/screens/games/JeopardyGame.tsx
+@@ -1,10 +1,12 @@
+-import React, { useEffect, useMemo, useState } from "react";
++import React, { useEffect, useMemo, useState, useRef } from "react";
+ import Lottie from "lottie-react";
+ import { JeopardyGame, JeopardyCategory, JeopardyQuestion, JeopardyTurnMode } from "@/types";
+ import { useSync } from "@/context/SyncContext";
++import { useLanguage } from "@/context/LanguageContext";
+ import { correctSound, wrongSound } from "@/utils/sound";
+ import { resolveMediaUrl } from "@/utils/media";
+ import fireworksAnimation from "@/assets/animations/fireworks.json";
++import { Eye, Volume2, X } from "lucide-react";
+ 
+ const TIMER_DURATION = 30;
+ 
+@@ -17,14 +19,19 @@ interface TeamClueUsage {
+ 
+ interface ActiveClueState {
+   type: ClueType;
+-  usedBy: 0 | 1;
+-  targetTeam?: 0 | 1;
++  usedBy: number;
++  targetTeam?: number;
+   note?: string;
+ }
+ 
+ interface JeopardyGameProps {
+   game: JeopardyGame;
++  teams?: any[];
++  teamScores?: Record<string, number>;
++  onScoreChange?: (teamId: string, score: number) => void;
+   onExit: () => void;
++  isObserveOnly?: boolean;
++  isPreview?: boolean;
+ }
+ 
+ const TimerCircle: React.FC<{ timeLeft: number, duration: number }> = ({ timeLeft, duration }) => {
+@@ -91,8 +98,43 @@ const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" }> = ({ type }) => {
+ 
+ const otherTeam = (team: 0 | 1) => (team === 0 ? 1 : 0) as 0 | 1;
+ 
+-const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
++const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({
++  game,
++  teams,
++  teamScores: teamScoresProp,
++  onScoreChange,
++  onExit,
++  isObserveOnly = false,
++  isPreview = false
++}) => {
+   const { sessionData, updateSession, isRemoteMode } = useSync();
++  const isPreviewOrObserve = isPreview || isObserveOnly;
++  const isSyncActive = isRemoteMode && !isPreviewOrObserve;
++  const { lang } = useLanguage();
++
++  const resolvedTeams = useMemo(() => {
++    if (teams && teams.length > 0) {
++      return teams;
++    }
++    if (sessionData?.fullShowData?.teams && sessionData.fullShowData.teams.length > 0) {
++      return sessionData.fullShowData.teams;
++    }
++    if (isRemoteMode && sessionData?.teams && sessionData.teams.length > 0) {
++      return sessionData.teams;
++    }
++    if (game.teams && game.teams.length > 0) {
++      return game.teams.map((name, idx) => ({
++        id: `fallback_${idx}`,
++        name,
++        score: 0,
++        players: []
++      }));
++    }
++    return [
++      { id: "team_1", name: "Team 1", score: 0, players: [] },
++      { id: "team_2", name: "Team 2", score: 0, players: [] },
++    ];
++  }, [isRemoteMode, sessionData?.teams, sessionData?.fullShowData?.teams, teams, game.teams, isPreviewOrObserve]);
+ 
+   const [active, setActive] = useState<{
+     category: JeopardyCategory;
+@@ -100,9 +142,20 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+   } | null>(null);
+   const [showAnswer, setShowAnswer] = useState(false);
+   const [usedIds, setUsedIds] = useState<Set<string>>(new Set());
+-  const [currentTeamIndex, setCurrentTeamIndex] = useState<0 | 1>(0);
+-  const [teamScores, setTeamScores] = useState<[number, number]>([0, 0]);
++  const [currentTeamIndex, setCurrentTeamIndex] = useState<number>(0);
++  const [teamScores, setTeamScores] = useState<number[]>(() => {
++    if (teamScoresProp) {
++      return resolvedTeams.map(t => teamScoresProp[t.id] ?? 0);
++    }
++    return resolvedTeams.map(() => 0);
++  });
+   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
++  const [previewViewMode, setPreviewViewMode] = useState<"points" | "question" | "answer">("points");
++
++  const [preparedClue, setPreparedClue] = useState("");
++  const [preparedSavedMsg, setPreparedSavedMsg] = useState("");
++  const [observationComment, setObservationComment] = useState("");
++  const [observationSubmittedMsg, setObservationSubmittedMsg] = useState("");
+ 
+   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
+   const [isTimerRunning, setIsTimerRunning] = useState(false);
+@@ -110,14 +163,29 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+   const [activeClue, setActiveClue] = useState<ActiveClueState | null>(null);
+   const [showClueMenu, setShowClueMenu] = useState(false);
+   const initialClueCount = game.cluesPerTeam ?? 2;
+-  const [clueUsage, setClueUsage] = useState<[TeamClueUsage, TeamClueUsage]>(() => [
+-    { remaining: initialClueCount, usedTypes: [] },
+-    { remaining: initialClueCount, usedTypes: [] },
+-  ]);
++  const [clueUsage, setClueUsage] = useState<TeamClueUsage[]>(() => 
++    resolvedTeams.map(() => ({ remaining: initialClueCount, usedTypes: [] }))
++  );
++
++  // Sync teamScores from props
++  useEffect(() => {
++    if (teamScoresProp) {
++      const newScores = resolvedTeams.map(t => teamScoresProp[t.id] ?? 0);
++      setTeamScores(newScores);
++    }
++  }, [teamScoresProp, resolvedTeams]);
++
++  // Keep clueUsage length in sync
++  useEffect(() => {
++    setClueUsage(prev => {
++      if (prev.length === resolvedTeams.length) return prev;
++      return resolvedTeams.map((_, idx) => prev[idx] || { remaining: initialClueCount, usedTypes: [] });
++    });
++  }, [resolvedTeams, initialClueCount]);
+ 
+   // 📡 MISSION 05/06: SYNC STATE FROM FIRESTORE
+   useEffect(() => {
+-    if (!isRemoteMode || !sessionData) return;
++    if (!isSyncActive || !sessionData) return;
+ 
+     // 1. Sync used IDs
+     if (sessionData.usedQuestionIds) {
+@@ -126,21 +194,19 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+ 
+     // 2. Sync Scores
+     if (sessionData.teamScores) {
+-      const teams = Object.keys(sessionData.teamScores).sort();
+-      const s1 = sessionData.teamScores[teams[0]] || 0;
+-      const s2 = sessionData.teamScores[teams[1]] || 0;
+-      setTeamScores([s1, s2]);
++      const newScores = resolvedTeams.map(t => sessionData.teamScores[t.id] ?? 0);
++      setTeamScores(newScores);
+     }
+ 
+     // 3. Sync Answer Reveal
+     if (sessionData.isAnswerRevealed !== undefined) {
+       setShowAnswer(sessionData.isAnswerRevealed);
+     }
+-  }, [sessionData, isRemoteMode]);
++  }, [sessionData, isSyncActive, resolvedTeams]);
+ 
+   // 📡 MISSION 06: QUESTION AUTO-OPENER
+   useEffect(() => {
+-    if (!isRemoteMode || !sessionData?.activeQuestionId) {
++    if (!isSyncActive || !sessionData?.activeQuestionId) {
+       if (!sessionData?.activeQuestionId && active) setActive(null);
+       return;
+     }
+@@ -158,11 +224,11 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+         }
+       });
+     }
+-  }, [sessionData?.activeQuestionId, sessionData?.isAnswerRevealed, isRemoteMode, game.categories]);
++  }, [sessionData?.activeQuestionId, sessionData?.isAnswerRevealed, isSyncActive, game.categories]);
+ 
+   // 📡 MISSION 05/06: LISTEN FOR REMOTE ACTIONS
+   useEffect(() => {
+-    if (!isRemoteMode || !sessionData?.hostCommand) return;
++    if (!isSyncActive || !sessionData?.hostCommand) return;
+     const { type } = sessionData.hostCommand;
+ 
+     if (type === 'correct') {
+@@ -172,10 +238,11 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     } else if (type === 'show_answer' || type === 'REVEAL_ANSWER') {
+       setShowAnswer(true);
+     }
+-  }, [sessionData?.hostCommand, isRemoteMode]);
++  }, [sessionData?.hostCommand, isSyncActive]);
+ 
+   // Timer effect
+   useEffect(() => {
++    if (isObserveOnly) return;
+     if (!isTimerRunning || !active) return;
+ 
+     if (timeLeft === 0) {
+@@ -189,15 +256,14 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     }, 1000);
+ 
+     return () => clearTimeout(timerId);
+-  }, [timeLeft, isTimerRunning, active]);
++  }, [timeLeft, isTimerRunning, active, isObserveOnly]);
+ 
+   useEffect(() => {
+     const count = game.cluesPerTeam ?? 2;
+-    setClueUsage([
+-      { remaining: count, usedTypes: [] },
+-      { remaining: count, usedTypes: [] },
+-    ]);
+-  }, [game.id, game.cluesPerTeam]);
++    setClueUsage(
++      resolvedTeams.map(() => ({ remaining: count, usedTypes: [] }))
++    );
++  }, [game.id, game.cluesPerTeam, resolvedTeams]);
+ 
+ 
+   useEffect(() => {
+@@ -207,6 +273,63 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     }
+   }, [active]);
+ 
++  useEffect(() => {
++    if (active?.question.id) {
++      const local = localStorage.getItem(`viktoria_prepared_clue_${active.question.id}`) || "";
++      const remote = sessionData?.preparedClues?.[active.question.id] || "";
++      setPreparedClue(remote || local);
++      setPreparedSavedMsg("");
++      setObservationComment("");
++      setObservationSubmittedMsg("");
++    }
++  }, [active?.question.id, sessionData?.preparedClues]);
++
++  const handleSavePreparedClue = () => {
++    if (!active?.question.id) return;
++    localStorage.setItem(`viktoria_prepared_clue_${active.question.id}`, preparedClue);
++    setPreparedSavedMsg("Clue saved successfully!");
++    setTimeout(() => setPreparedSavedMsg(""), 3000);
++
++    if (isSyncActive && sessionData) {
++      const currentClues = sessionData.preparedClues || {};
++      updateSession({
++        preparedClues: {
++          ...currentClues,
++          [active.question.id]: preparedClue
++        }
++      });
++    }
++  };
++
++  const handleSubmitObservation = () => {
++    if (!active?.question.id || !observationComment.trim()) return;
++
++    const judgeName = localStorage.getItem('viktoria_elder_name') || 'Judge';
++    const newObs = {
++      id: crypto.randomUUID(),
++      judgeName,
++      questionId: active.question.id,
++      categoryName: active.category.name,
++      questionText: active.question.question || "No clue text",
++      comment: observationComment.trim(),
++      timestamp: new Date().toISOString()
++    };
++
++    const localObs = JSON.parse(localStorage.getItem('viktoria_observations') || '[]');
++    localStorage.setItem('viktoria_observations', JSON.stringify([newObs, ...localObs]));
++
++    if (isSyncActive && sessionData) {
++      const currentObs = sessionData.observations || [];
++      updateSession({
++        observations: [newObs, ...currentObs]
++      });
++    }
++
++    setObservationComment("");
++    setObservationSubmittedMsg("Observation submitted successfully!");
++    setTimeout(() => setObservationSubmittedMsg(""), 3000);
++  };
++
+   const allPoints = useMemo(() => {
+     const pts = new Set<number>();
+     game.categories.forEach((cat) =>
+@@ -218,7 +341,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+   const markUsed = (id: string) => {
+     const next = new Set(usedIds).add(id);
+     setUsedIds(next);
+-    if (isRemoteMode) {
++    if (isSyncActive) {
+       updateSession({ usedQuestionIds: Array.from(next) });
+     }
+   };
+@@ -231,7 +354,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     setActiveClue(null);
+     setShowClueMenu(false);
+ 
+-    if (isRemoteMode) {
++    if (isSyncActive) {
+       updateSession({
+         activeQuestionId: null,
+         activeCategoryId: null,
+@@ -259,10 +382,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     }, durationMs); // Increased timeout for animations
+   };
+ 
+-  const advanceTurnAfterResolution = (result: "correct" | "wrong", basis: 0 | 1) => {
++  const advanceTurnAfterResolution = (result: "correct" | "wrong", basis: number) => {
+     const shouldSwitch =
+       result === "wrong" || game.turnMode === JeopardyTurnMode.ALTERNATE_AFTER_QUESTION;
+-    const nextTeam = shouldSwitch ? otherTeam(basis) : basis;
++    const nextTeam = shouldSwitch ? (basis + 1) % resolvedTeams.length : basis;
+     setCurrentTeamIndex(nextTeam);
+     setHasReboundAttempted(false);
+     setActiveClue(null);
+@@ -274,13 +397,13 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     const pts = active.question.points || 0;
+     const answeringTeam = currentTeamIndex;
+     const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : answeringTeam;
+-    const newScores = [...teamScores] as [number, number];
++    const newScores = [...teamScores];
+ 
+     if (activeClue?.type === "ASK_OTHER_TEAM" && activeClue.targetTeam !== undefined) {
+       const half = Math.ceil(pts / 2);
+       const remainder = pts - half;
+-      newScores[activeClue.usedBy] += half;
+-      newScores[activeClue.targetTeam] += remainder;
++      newScores[activeClue.usedBy] = (newScores[activeClue.usedBy] || 0) + half;
++      newScores[activeClue.targetTeam] = (newScores[activeClue.targetTeam] || 0) + remainder;
+       setTeamScores(newScores);
+ 
+       markUsed(active.question.id);
+@@ -290,18 +413,20 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+       return;
+     }
+ 
+-    newScores[answeringTeam] += pts;
++    newScores[answeringTeam] = (newScores[answeringTeam] || 0) + pts;
+     setTeamScores(newScores);
+ 
+     // 📡 SYNC SCORE BACK TO FIRESTORE
+-    if (isRemoteMode && sessionData?.teamScores) {
+-      const teams = Object.keys(sessionData.teamScores).sort();
+-      updateSession({
+-        teamScores: {
+-          ...sessionData.teamScores,
+-          [teams[answeringTeam]]: newScores[answeringTeam]
+-        }
+-      });
++    if (isSyncActive && sessionData?.teamScores) {
++      const targetTeamId = resolvedTeams[answeringTeam]?.id;
++      if (targetTeamId) {
++        updateSession({
++          teamScores: {
++            ...sessionData.teamScores,
++            [targetTeamId]: newScores[answeringTeam]
++          }
++        });
++      }
+     }
+ 
+     markUsed(active.question.id);
+@@ -317,14 +442,14 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+ 
+     if (reboundsAllowed && !hasReboundAttempted) {
+       setHasReboundAttempted(true);
+-      const nextTeam = otherTeam(currentTeamIndex);
++      const nextTeam = (currentTeamIndex + 1) % resolvedTeams.length;
+       setCurrentTeamIndex(nextTeam);
+       setIsTimerRunning(false);
+       setTimeLeft(TIMER_DURATION);
+       setIsTimerRunning(true);
+       showFeedback("wrong", { closeAfter: false, durationMs: 1200 });
+ 
+-      if (isRemoteMode) {
++      if (isSyncActive) {
+         updateSession({ currentTeamIndex: nextTeam, hasReboundAttempted: true });
+       }
+       return;
+@@ -337,16 +462,16 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : currentTeamIndex;
+     advanceTurnAfterResolution("wrong", turnBasis);
+ 
+-    if (isRemoteMode) {
++    if (isSyncActive) {
+       updateSession({
+         activeQuestionId: null,
+         hasReboundAttempted: false,
+-        currentTeamIndex: (turnBasis === 0 ? 1 : 0) // Basic flip for wrong answer
++        currentTeamIndex: (turnBasis + 1) % resolvedTeams.length
+       });
+     }
+   };
+ 
+-  const teamLabel = (index: 0 | 1) => game.teams?.[index] || `Team ${index + 1}`;
++  const teamLabel = (index: number) => resolvedTeams[index]?.name || `Team ${index + 1}`;
+   const explanationPlacement = active?.question.explanationPlacement || "WITH_ANSWER";
+ 
+   const getHostCue = () => {
+@@ -363,7 +488,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     if (!active) return;
+     const teamIdx = currentTeamIndex;
+     const usage = clueUsage[teamIdx];
+-    if (usage.remaining <= 0 || usage.usedTypes.includes(type)) return;
++    if (!usage || usage.remaining <= 0 || usage.usedTypes.includes(type)) return;
+ 
+     const updatedTeam: TeamClueUsage = {
+       remaining: Math.max(0, usage.remaining - 1),
+@@ -371,14 +496,11 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     };
+ 
+     setClueUsage((prev) =>
+-      [
+-        teamIdx === 0 ? updatedTeam : prev[0],
+-        teamIdx === 1 ? updatedTeam : prev[1],
+-      ] as [TeamClueUsage, TeamClueUsage]
++      prev.map((u, idx) => (idx === teamIdx ? updatedTeam : u))
+     );
+ 
+     if (type === "ASK_OTHER_TEAM") {
+-      const helperTeam = otherTeam(teamIdx);
++      const helperTeam = (teamIdx + 1) % resolvedTeams.length;
+       setActiveClue({ type, usedBy: teamIdx, targetTeam: helperTeam });
+       setCurrentTeamIndex(helperTeam);
+       setHasReboundAttempted(false);
+@@ -403,7 +525,19 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     setActiveClue(null);
+     setShowClueMenu(false);
+     setTimeLeft(TIMER_DURATION);
+-    setIsTimerRunning(true);
++    setIsTimerRunning(!isObserveOnly);
++
++    if (isSyncActive) {
++      updateSession({
++        activeQuestionId: question.id,
++        activeCategoryId: category.id,
++        isAnswerRevealed: false,
++        isTimerRunning: true,
++        timeLeft: TIMER_DURATION,
++        hasReboundAttempted: false,
++        currentTeamIndex: currentTeamIndex
++      });
++    }
+   };
+ 
+   // Debug: log the media URL we try to render for troubleshooting broken images
+@@ -419,8 +553,20 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+   }, [active?.question.questionMediaUrl, active?.question.questionMediaType]);
+ 
+   useEffect(() => {
++    if (isPreviewOrObserve) return;
++
+     const onKey = (e: KeyboardEvent) => {
+       if (!active) return;
++
++      const target = e.target as HTMLElement;
++      if (
++        target.tagName === "INPUT" ||
++        target.tagName === "TEXTAREA" ||
++        target.isContentEditable
++      ) {
++        return;
++      }
++
+       if (e.key === "r" || e.key === "R") {
+         e.preventDefault();
+         handleCorrect();
+@@ -432,7 +578,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+     };
+     window.addEventListener("keydown", onKey);
+     return () => window.removeEventListener("keydown", onKey);
+-  }, [active, currentTeamIndex]);
++  }, [active, currentTeamIndex, isPreviewOrObserve]);
+ 
+   return (
+     <div className="h-full flex flex-col bg-gradient-to-b from-blue-950 to-slate-900 text-white relative">
+@@ -445,17 +591,17 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+         </div>
+         <div className="flex items-center gap-4">
+           <div className="flex items-center gap-3 text-sm">
+-            {([0, 1] as const).map((index) => (
++            {resolvedTeams.map((team, index) => (
+               <div
+-                key={index}
++                key={team.id || index}
+                 className={`px-3 py-1 rounded-lg border transition-all ${currentTeamIndex === index
+                   ? "bg-yellow-400 text-black border-yellow-300 scale-110"
+                   : "bg-slate-800 text-slate-200 border-slate-600"
+                   }`}
+               >
+                 <div className="flex items-baseline gap-1">
+-                  <span className="font-bold">{teamLabel(index)}</span>
+-                  <span>${teamScores[index]}</span>
++                  <span className="font-bold">{team.name}</span>
++                  <span>{teamScores[index] ?? 0}</span>
+                 </div>
+                 <div className="text-[11px] text-yellow-200">
+                   Clues left: {clueUsage[index]?.remaining ?? 0}
+@@ -518,7 +664,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+                       ? "bg-white p-1 cursor-not-allowed"
+                       : "bg-blue-700 hover:bg-blue-500 text-yellow-300 border-blue-400 hover:scale-[1.02]"
+                       }`}
+-                    title={isUsed ? "Question answered" : `${cat.name} · $${points}`}
++                    title={isUsed ? "Question answered" : `${cat.name} · ${points}`}
+                   >
+                     {isUsed ? (
+                       <img
+@@ -527,7 +673,17 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+                         className="h-full w-full object-contain"
+                       />
+                     ) : (
+-                      `$${points}`
++                      previewViewMode === "question" ? (
++                        <span className="text-[10px] md:text-xs font-bold p-2 text-center break-words line-clamp-4 leading-normal text-white">
++                          {q.question}
++                        </span>
++                      ) : previewViewMode === "answer" ? (
++                        <span className="text-[10px] md:text-xs font-bold p-2 text-center break-words line-clamp-4 leading-normal text-emerald-300">
++                          {q.correctAnswer}
++                        </span>
++                      ) : (
++                        `${points}`
++                      )
+                     )}
+                   </button>
+                 );
+@@ -537,8 +693,29 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+         )}
+       </main>
+ 
++      {isPreviewOrObserve && (
++        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-slate-950/90 border border-white/10 px-4 py-2 rounded-2xl flex items-center gap-2 shadow-2xl backdrop-blur-md z-30">
++          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mr-2">
++            View Mode:
++          </span>
++          {(["points", "question", "answer"] as const).map((mode) => (
++            <button
++              key={mode}
++              onClick={() => setPreviewViewMode(mode)}
++              className={`px-4 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95 ${
++                previewViewMode === mode
++                  ? "bg-[#fca311] text-black shadow-[0_0_15px_rgba(252,163,17,0.3)] font-black"
++                  : "bg-white/5 text-slate-400 hover:text-white border border-white/5"
++              }`}
++            >
++              {mode}
++            </button>
++          ))}
++        </div>
++      )}
++
+       {/* Active clue modal */}
+-      {active && (
++      {active && !isObserveOnly && (
+         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-8">
+           <div className="bg-slate-900 border border-yellow-400 rounded-2xl p-8 w-full h-full flex flex-col gap-6 shadow-2xl overflow-hidden">
+             <header className="flex items-center justify-between">
+@@ -546,7 +723,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+                 <h2 className="text-3xl font-bold text-yellow-300 uppercase">
+                   {active.category.name}
+                 </h2>
+-                <p className="text-xl text-slate-300">${active.question.points}</p>
++                <p className="text-xl text-slate-300">{active.question.points} points</p>
+               </div>
+               <TimerCircle timeLeft={timeLeft} duration={TIMER_DURATION} />
+               <button
+@@ -784,6 +961,240 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit }) => {
+           </div>
+         </div>
+       )}
++
++      {/* Active clue modal (Judge observe-only mode) */}
++      {active && isObserveOnly && (
++        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-6 md:p-12">
++          <div className="bg-[#0f172a] border border-[#fca311]/40 rounded-3xl p-6 md:p-8 w-full max-w-6xl h-full max-h-[90vh] flex flex-col gap-6 shadow-[0_0_50px_rgba(252,163,17,0.15)] overflow-hidden">
++            <header className="flex items-center justify-between border-b border-white/10 pb-4">
++              <div>
++                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#fca311]">
++                  Panel of Elders - Clue Inspection
++                </span>
++                <h2 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">
++                  {active.category.name} · <span className="text-[#fca311]">{active.question.points} points</span>
++                </h2>
++              </div>
++              <button
++                onClick={clearQuestionState}
++                className="p-3 rounded-2xl bg-white/5 hover:bg-red-500/10 hover:text-red-400 text-slate-400 border border-white/5 transition-all active:scale-95 flex items-center justify-center"
++              >
++                <X size={24} />
++              </button>
++            </header>
++
++            <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 pr-2">
++              {/* Left Column: Question & Options */}
++              <div className="space-y-6 flex flex-col justify-start">
++                <div className="space-y-2">
++                  <span className="text-[10px] font-black uppercase tracking-widest text-[#fca311]/80">
++                    The Question / Clue
++                  </span>
++                  <div className="bg-slate-900/60 border border-white/5 rounded-2xl p-6 shadow-inner">
++                    <p className="text-xl md:text-2xl leading-relaxed font-extrabold text-white">
++                      {active.question.question || "No clue text provided."}
++                    </p>
++                  </div>
++                </div>
++
++                {/* Question media (image/audio/video) */}
++                {active.question.questionMediaUrl && active.question.questionMediaType && (
++                  <div className="space-y-2">
++                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
++                      Question Media
++                    </span>
++                    <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-4 flex justify-center w-full">
++                      {active.question.questionMediaType === "IMAGE" && (
++                        <img
++                          src={resolveMediaUrl(active.question.questionMediaUrl)}
++                          alt="Question media"
++                          className="max-h-60 w-auto rounded-lg shadow-md object-contain"
++                        />
++                      )}
++                      {active.question.questionMediaType === "AUDIO" && (
++                        <audio
++                          controls
++                          src={resolveMediaUrl(active.question.questionMediaUrl)}
++                          className="w-full"
++                        />
++                      )}
++                      {active.question.questionMediaType === "VIDEO" && (
++                        <video
++                          controls
++                          src={resolveMediaUrl(active.question.questionMediaUrl)}
++                          className="max-h-60 w-auto rounded-lg shadow-md"
++                        />
++                      )}
++                    </div>
++                  </div>
++                )}
++
++                {/* Options (Multiple Choice) */}
++                {active.question.options && active.question.options.some(opt => opt && opt.trim() !== "") && (
++                  <div className="space-y-2">
++                    <span className="text-[10px] font-black uppercase tracking-widest text-[#fca311]/80">
++                      Options
++                    </span>
++                    <div className="grid grid-cols-1 gap-2.5">
++                      {active.question.options.filter(opt => opt && opt.trim() !== "").map((opt, i) => {
++                        const isCorrectOpt = opt.toLowerCase().trim() === active.question.correctAnswer?.toLowerCase().trim();
++                        return (
++                          <div
++                            key={i}
++                            className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
++                              isCorrectOpt
++                                ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
++                                : "bg-slate-900/40 border-white/5 text-slate-300"
++                            }`}
++                          >
++                            <span className="font-bold text-sm">{opt}</span>
++                            {isCorrectOpt && (
++                              <span className="bg-emerald-500 text-black text-[9px] font-black uppercase px-2 py-0.5 rounded">
++                                Correct
++                              </span>
++                            )}
++                          </div>
++                        );
++                      })}
++                    </div>
++                  </div>
++                )}
++
++                {/* Prepared Clue/Hint Section */}
++                <div className="space-y-2 border-t border-white/5 pt-4">
++                  <span className="text-[10px] font-black uppercase tracking-widest text-[#fca311]">
++                    Elder's Prepared Hint (In Advance)
++                  </span>
++                  <div className="space-y-3">
++                    <textarea
++                      value={preparedClue}
++                      onChange={(e) => {
++                        setPreparedClue(e.target.value);
++                        setPreparedSavedMsg("");
++                      }}
++                      placeholder="Write a custom hint/clue to save in advance..."
++                      className="w-full bg-slate-900/60 border border-white/5 rounded-xl p-3 text-sm text-slate-300 outline-none focus:border-[#fca311]/40 focus:ring-0 resize-none h-20"
++                    />
++                    <div className="flex items-center justify-between">
++                      <button
++                        onClick={handleSavePreparedClue}
++                        className="px-4 py-2 bg-[#fca311] hover:bg-[#e8920a] text-black text-xs font-black uppercase rounded-xl transition-all active:scale-95"
++                      >
++                        Save Hint
++                      </button>
++                      {preparedSavedMsg && (
++                        <span className="text-xs font-bold text-emerald-400 animate-pulse">
++                          {preparedSavedMsg}
++                        </span>
++                      )}
++                    </div>
++                  </div>
++                </div>
++              </div>
++
++              {/* Right Column: Correct Answer & Explanation */}
++              <div className="space-y-6 flex flex-col justify-start">
++                <div className="space-y-2">
++                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
++                    Correct Answer
++                  </span>
++                  <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-2xl p-6 shadow-md">
++                    <p className="text-2xl md:text-3xl font-black text-emerald-400">
++                      {active.question.correctAnswer || "No answer configured."}
++                    </p>
++                  </div>
++                </div>
++
++                {/* Explanation */}
++                <div className="space-y-2">
++                  <span className="text-[10px] font-black uppercase tracking-widest text-[#fca311]/80">
++                    Explanation
++                  </span>
++                  <div className="bg-slate-900/60 border border-white/5 rounded-2xl p-6 shadow-inner min-h-[100px]">
++                    <p className="text-slate-300 text-sm leading-relaxed font-medium">
++                      {active.question.explanation?.trim() || "No explanation provided for this question."}
++                    </p>
++                  </div>
++                </div>
++
++                {/* Answer Media */}
++                {active.question.answerMediaUrl && active.question.answerMediaType && (
++                  <div className="space-y-2">
++                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
++                      Answer Media
++                    </span>
++                    <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-4 flex justify-center w-full">
++                      {active.question.answerMediaType === "IMAGE" && (
++                        <img
++                          src={resolveMediaUrl(active.question.answerMediaUrl)}
++                          alt="Answer media"
++                          className="max-h-60 w-auto rounded-lg shadow-md object-contain"
++                        />
++                      )}
++                      {active.question.answerMediaType === "AUDIO" && (
++                        <audio
++                          controls
++                          src={resolveMediaUrl(active.question.answerMediaUrl)}
++                          className="w-full"
++                        />
++                      )}
++                      {active.question.answerMediaType === "VIDEO" && (
++                        <video
++                          controls
++                          src={resolveMediaUrl(active.question.answerMediaUrl)}
++                          className="max-h-60 w-auto rounded-lg shadow-md"
++                        />
++                      )}
++                    </div>
++                  </div>
++                )}
++
++                {/* Observation Submission Section */}
++                <div className="space-y-2 border-t border-white/5 pt-4">
++                  <span className="text-[10px] font-black uppercase tracking-widest text-violet-400">
++                    Submit Observation to Organizers
++                  </span>
++                  <div className="space-y-3">
++                    <textarea
++                      value={observationComment}
++                      onChange={(e) => {
++                        setObservationComment(e.target.value);
++                        setObservationSubmittedMsg("");
++                      }}
++                      placeholder="Write a comment, note or error alert for this card..."
++                      className="w-full bg-slate-900/60 border border-white/5 rounded-xl p-3 text-sm text-slate-300 outline-none focus:border-violet-500/40 focus:ring-0 resize-none h-20"
++                    />
++                    <div className="flex items-center justify-between">
++                      <button
++                        onClick={handleSubmitObservation}
++                        disabled={!observationComment.trim()}
++                        className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-black uppercase rounded-xl transition-all active:scale-95"
++                      >
++                        Submit Observation
++                      </button>
++                      {observationSubmittedMsg && (
++                        <span className="text-xs font-bold text-emerald-400 animate-pulse">
++                          {observationSubmittedMsg}
++                        </span>
++                      )}
++                    </div>
++                  </div>
++                </div>
++              </div>
++            </div>
++            
++            <footer className="border-t border-white/10 pt-4 flex justify-end shrink-0">
++              <button
++                onClick={clearQuestionState}
++                className="px-6 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-extrabold text-xs uppercase tracking-wider transition-all border border-white/5 active:scale-95"
++              >
++                Close Verification
++              </button>
++            </footer>
++          </div>
++        </div>
++      )}
++
+       {feedback && <FeedbackOverlay type={feedback} />}
+     </div>
+   );

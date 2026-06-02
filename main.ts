@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, screen } from "electron";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 let win: BrowserWindow | null = null;
+let viewerWin: BrowserWindow | null = null;
 
 dotenv.config();
 
@@ -421,6 +422,22 @@ ipcMain.handle("delete-show-local", async (_event, payload: { id: string }) => {
   }
 });
 
+// Save active show run state (for resume after restart)
+ipcMain.handle("save-active-run-local", async (_event, payload: { id: string; runState: any }) => {
+  const { id, runState } = payload || {};
+  if (!id) return false;
+  try {
+    const dir = path.join(app.getPath("userData"), "runs");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, `${id}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(runState, null, 2));
+    return true;
+  } catch (error) {
+    console.error("Error saving active run:", error);
+    return false;
+  }
+});
+
 // Simple ping example
 ipcMain.handle("ping", async () => {
   console.log("Ping received from renderer");
@@ -463,8 +480,84 @@ ipcMain.on("message", (event, data) => {
 });
 
 /* ----------------------------
-   APP LIFECYCLE
+   DUAL SCREEN / VIEWER WINDOW
 ----------------------------- */
+
+ipcMain.handle("open-viewer-window", async (_event, urlPath: string = "/?role=viewer&localSync=true") => {
+  try {
+    // Close any existing viewer window first
+    if (viewerWin && !viewerWin.isDestroyed()) {
+      viewerWin.close();
+    }
+
+    // --- Detect the external (HDMI) display ---
+    const displays = screen.getAllDisplays();
+    const primaryDisplay = screen.getPrimaryDisplay();
+
+    // Pick the secondary display (the one with the biggest area that isn't primary).
+    // If none exists, fall back to the primary.
+    const externalDisplay = displays
+      .filter(d => d.id !== primaryDisplay.id)
+      .sort((a, b) => (b.bounds.width * b.bounds.height) - (a.bounds.width * a.bounds.height))[0]
+      || primaryDisplay;
+
+    const { x, y, width, height } = externalDisplay.bounds;
+    console.log(`🖥️ Opening viewer on display ${externalDisplay.id} at ${x},${y} (${width}x${height})`);
+
+    const isDev = process.env.NODE_ENV === "development" || !fs.existsSync(path.join(__dirname, "../dist/index.html"));
+
+    viewerWin = new BrowserWindow({
+      x,
+      y,
+      width,
+      height,
+      fullscreen: true,          // Go fullscreen on the TV
+      frame: false,              // No window chrome on the presentation screen
+      title: "Viktoria — Pantalla TV",
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        webSecurity: false,
+        preload: path.join(__dirname, "preload.js"),
+      },
+    });
+
+    if (isDev) {
+      await viewerWin.loadURL(`http://localhost:5173${urlPath}`);
+    } else {
+      const fileUrl = `file://${path.join(__dirname, "../dist/index.html")}${urlPath}`;
+      await viewerWin.loadURL(fileUrl);
+    }
+
+    // Notify the main window when the viewer is closed by the user
+    viewerWin.on("closed", () => {
+      viewerWin = null;
+      if (win && !win.isDestroyed()) {
+        win.webContents.send("viewer-window-closed");
+      }
+    });
+
+    console.log("✅ Viewer window opened on external display:", urlPath);
+    return true;
+  } catch (err) {
+    console.error("❌ Failed to open viewer window:", err);
+    return false;
+  }
+});
+
+ipcMain.handle("close-viewer-window", async () => {
+  try {
+    if (viewerWin && !viewerWin.isDestroyed()) {
+      viewerWin.close();
+      viewerWin = null;
+    }
+    return true;
+  } catch (err) {
+    console.error("❌ Failed to close viewer window:", err);
+    return false;
+  }
+});
+
 
 app.whenReady().then(() => {
   createWindow();

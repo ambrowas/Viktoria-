@@ -317,6 +317,12 @@ export interface Team {
   players: Player[];
 }
 
+export interface ShowMediaItem {
+  id: string;
+  url: string;
+  size: "small" | "medium" | "large";
+}
+
 export interface ShowSettings {
   numTeams: number;
   playersPerTeam: number;
@@ -326,6 +332,10 @@ export interface ShowSettings {
   hostControl?: "ipad" | "manual";
   playerControl?: "ipad" | "manual";
   language?: "en" | "es";
+  location?: string;
+  winnerTitle?: string;
+  thankYouMessage?: string;
+  organizers?: Array<{ id: string; role: string; name: string }>;
 }
 
 export interface ShowRound {
@@ -346,6 +356,9 @@ export interface Show {
   rounds: ShowRound[];
   createdAt: string;
   updatedAt?: string;
+  sponsors?: ShowMediaItem[];
+  assets?: ShowMediaItem[];
+  themeImage?: string;
 }
 export interface DefinitionClue {
   id: string;

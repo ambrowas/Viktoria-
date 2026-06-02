@@ -1,0 +1,26 @@
+================ STEP 6449 ================
+Tool: multi_replace_file_content
+Description: "Added drag-and-drop sponsor and asset slot inputs to ShowManager.tsx with customizable sizing options (Small, Medium, Large) using client-side image compression."
+Num chunks: 2071
+================ STEP 6497 ================
+Tool: multi_replace_file_content
+Description: "Implemented drag-and-drop reordering for Sponsors and Assets grids. Added a stable ID initialization check on load and creator initialization to support drag-and-drop context. Implemented a full-screen premium preview modal showing the sponsors layout above the Presents title."
+Num chunks: 2072
+================ STEP 6519 ================
+Tool: replace_file_content
+Description: "Added renderInteractivePreviewSponsors helper to render draggable and resizable sponsor cards in the main screen preview modal."
+  TargetContent:
+"  const renderAssetsDndGrid = () => {\n    const list = [...(showDraft.assets || [])];\n    while (list.length < 4) {\n      list.push({ id: uuid(), url: \"\", size: \"medium\" });\n    }\n\n    return (\n      <DragDropContext onDragEnd={(result) => handleMediaDragEnd(result, \"assets\")}>\n      
+  ReplacementContent:
+"  const renderAssetsDndGrid = () => {\n    const list = [...(showDraft.assets || [])];\n    while (list.length < 4) {\n      list.push({ id: uuid(), url: \"\", size: \"medium\" });\n    }\n\n    return (\n      <DragDropContext onDragEnd={(result) => handleMediaDragEnd(result, \"assets\")}>\n        <Droppable droppableId=\"assets-droppable\" direction=\"horizontal\">\n          {(provided) => (\n            <div\n              ref={provided.innerRef}\n              {...provided.droppableProps}\n              className=\"grid grid-cols-2 md:grid-cols-4 gap-4\"\n            >\n              {l
+================ STEP 6527 ================
+Tool: replace_file_content
+Description: "Updated the main screen preview modal in ShowManager.tsx to render the interactive drag-and-drop sponsors row."
+  TargetContent:
+"      {isPreviewingSponsors && (\n        <div className=\"fixed inset-0 z-[3000] bg-[#0a0a0a] text-white flex flex-col items-center justify-center p-8 border border-white/10 shadow-2xl select-none animate-in fade-in duration-300\">\n          {/* Close button */}\n          <button\n            on
+  ReplacementContent:
+"      {isPreviewingSponsors && (\n        <div className=\"fixed inset-0 z-[3000] bg-[#0a0a0a] text-white flex flex-col items-center justify-center p-8 border border-white/10 shadow-2xl select-none animate-in fade-in duration-300\">\n          {/* Close button */}\n          <button\n            onClick={() => setIsPreviewingSponsors(false)}\n            className=\"absolute top-6 left-6 bg-white/5 hover:bg-white/10 text-white p-4 rounded-2xl transition-all border border-white/10 backdrop-blur-sm flex items-center gap-2 font-bold uppercase tracking-widest text-xs z-50 pointer-events-auto\"\n 
+================ STEP 7008 ================
+Tool: multi_replace_file_content
+Description: "Add default location setting and an input field to the basics step in ShowManager.tsx."
+Num chunks: 2070

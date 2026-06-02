@@ -1,6 +1,6 @@
 // src/types/sync.ts
 
-export type DeviceRole = 'host' | 'player' | 'viewer';
+export type DeviceRole = 'host' | 'player' | 'viewer' | 'judge';
 export type SessionStep = 'lobby' | 'question' | 'reveal' | 'scoreboard' | 'intermission' | string;
 
 export interface Participant {
@@ -54,6 +54,19 @@ export interface LiveSession {
         label: string;
         timestamp: number;
     } | null;
+    // Extended fields for ShowRunner / ShowHostController
+    eliminatedTeamIds?: string[];
+    reserveQuestions?: any[];
+    activeTieBreaker?: any;
+    wasAnsweredCorrectly?: boolean;
+    smartAzzState?: any;
+    // Extended fields for remote game state
+    fullShowGames?: any[];
+    isTimerRunning?: boolean;
+    timeLeft?: number;
+    incorrectOptions?: any[];
+    pendingReboundTeam?: string | null;
+    attemptedTeams?: string[];
     lastAction: string;
     updatedAt: any;
 }

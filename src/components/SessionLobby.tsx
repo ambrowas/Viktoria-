@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSync } from '@/context/SyncContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, UserPlus, Play, QrCode, Monitor, Tablet, Copy, Check, ShieldCheck } from 'lucide-react';
+import { Users, UserPlus, Play, QrCode, Monitor, Tablet, Copy, Check, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { Team } from '@/types';
 import TeamIcon from '@/components/TeamIcon';
 
@@ -9,9 +9,12 @@ interface SessionLobbyProps {
     teams: Team[];
     onStart: () => void;
     hostControl?: "ipad" | "manual";
+    onBack?: () => void;
+    themeImage?: string;
+    location?: string;
 }
 
-const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl }) => {
+const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl, onBack, themeImage, location }) => {
     console.log("Lobby hostControl:", hostControl);
     const { sessionId, participants, sessionData, registerParticipant } = useSync();
     useEffect(() => {
@@ -58,7 +61,7 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                         </div>
                     </div>
                     <p className="mt-4 text-slate-500 text-sm flex items-center gap-2">
-                        <Monitor size={14} /> Host Mode &bull; <Tablet size={14} /> iPad Players
+                        <Monitor size={14} /> Host Mode &bull; <span className="text-slate-600">Local Sync</span>
                     </p>
                 </div>
             </header>
@@ -246,6 +249,14 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                 </div>
 
                 <div className="flex gap-4">
+                    {onBack && (
+                        <button
+                            onClick={onBack}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold px-8 py-5 rounded-[2rem] transition-all flex items-center gap-3"
+                        >
+                            <ArrowLeft size={20} /> Volver
+                        </button>
+                    )}
                     <button
                         className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-10 py-5 rounded-[2rem] transition-all flex items-center gap-3"
                     >
