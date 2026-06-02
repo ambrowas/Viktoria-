@@ -28,8 +28,8 @@ const DEFAULT_SETTINGS = {
   notes: "",
   introMusic: "viktoria" as const,
   language: "es" as const,
-  hostControl: "ipad" as const,
-  playerControl: "ipad" as const,
+  hostControl: "manual" as const,
+  playerControl: "manual" as const,
 };
 
 const uuid = () => crypto.randomUUID();
@@ -514,7 +514,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
         <div>
           <label className="block font-semibold mb-1">Host Mode</label>
           <select
-            value={showDraft.settings.hostControl || "ipad"}
+            value={showDraft.settings.hostControl || "manual"}
             onChange={(e) => updateSettings({ hostControl: e.target.value as any })}
             className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
           >
@@ -525,7 +525,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
         <div>
           <label className="block font-semibold mb-1">Player Mode</label>
           <select
-            value={showDraft.settings.playerControl || "ipad"}
+            value={showDraft.settings.playerControl || "manual"}
             onChange={(e) => updateSettings({ playerControl: e.target.value as any })}
             className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
           >

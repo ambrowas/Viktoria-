@@ -354,6 +354,73 @@ ipcMain.handle(
     }
   }
 );
+// ─── Show IPC Handlers ───────────────────────────────────────────────────────
+
+const showsDir = () => path.join(app.getPath("userData"), "shows");
+
+const listLocalShows = (): any[] => {
+  const dir = showsDir();
+  if (!fs.existsSync(dir)) return [];
+  const files = fs.readdirSync(dir).filter(f => f.endsWith(".json"));
+  const shows: any[] = [];
+  for (const file of files) {
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8"));
+      shows.push(data);
+    } catch (err) {
+      console.warn("Failed to read show file:", file, err);
+    }
+  }
+  return shows;
+};
+
+ipcMain.handle("list-shows-local", async () => {
+  try {
+    return listLocalShows();
+  } catch (error) {
+    console.error("Error listing local shows:", error);
+    return [];
+  }
+});
+
+ipcMain.handle("save-show-local", async (_event, payload: { id: string; show: any }) => {
+  const { id, show } = payload || {};
+  if (!id || !show) {
+    console.error("save-show-local requires id and show payload");
+    return false;
+  }
+  try {
+    const dir = showsDir();
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, `${id}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(show, null, 2), "utf8");
+    console.log(`Saved show to ${filePath}`);
+    return true;
+  } catch (error) {
+    console.error("Error saving show locally:", error);
+    return false;
+  }
+});
+
+ipcMain.handle("delete-show-local", async (_event, payload: { id: string }) => {
+  const { id } = payload || {};
+  if (!id) {
+    console.error("delete-show-local requires an id");
+    return false;
+  }
+  try {
+    const filePath = path.join(showsDir(), `${id}.json`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log(`Deleted show: ${filePath}`);
+    }
+    return true;
+  } catch (error) {
+    console.error("Error deleting local show:", error);
+    return false;
+  }
+});
+
 // Simple ping example
 ipcMain.handle("ping", async () => {
   console.log("Ping received from renderer");

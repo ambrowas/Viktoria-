@@ -1,1 +1,33 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-electron/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# User-uploaded media (runtime generated)
+public/images/uploads/
+
+# Scratch / temp files
+scratch/
+git_diff.txt
+diff_smartazz.txt
+recovered_repl_*.tsx
+restored_jeopardy.tsx
+candidate_*.tsx
+check_fb.js
+check_firebase.ts
+
+# Firebase
+.firebase/
+
+# Logs
+*.log
+
+# OS
+.DS_Store

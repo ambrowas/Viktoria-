@@ -57,9 +57,8 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit }) => {
         return Object.fromEntries(show.teams.map((t) => [t.id, 0]));
     });
     const [isMusicPlaying, setIsMusicPlaying] = useState(true);
-    const [hostControl, setHostControl] = useState<"ipad" | "manual">(show.settings.hostControl || "ipad");
-    useEffect(() => { console.log("ShowRunner hostControl changed:", hostControl); }, [hostControl]);
-    const [playerControl, setPlayerControl] = useState<"ipad" | "manual">(show.settings.playerControl || "ipad");
+    const [hostControl, setHostControl] = useState<"ipad" | "manual">(show.settings.hostControl || "manual");
+    const [playerControl, setPlayerControl] = useState<"ipad" | "manual">(show.settings.playerControl || "manual");
 
     const { isRemoteMode, updateSession, startSession, leaveSession, sessionId, sessionData } = useSync();
 
