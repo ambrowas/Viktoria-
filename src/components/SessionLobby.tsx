@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSync } from '@/context/SyncContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, UserPlus, Play, QrCode, Monitor, Tablet, Copy, Check, ShieldCheck, MapPin, Volume2, VolumeX } from 'lucide-react';
+import { Users, UserPlus, Play, QrCode, Monitor, Tablet, Copy, Check, ShieldCheck, MapPin, Volume2, VolumeX, LogOut } from 'lucide-react';
 import { Team } from '@/types';
 import TeamIcon from '@/components/TeamIcon';
 import { checkInSound } from '@/utils/sound';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface SessionLobbyProps {
     teams: Team[];
     onStart: () => void;
+    onBack?: () => void;
     hostControl?: "ipad" | "manual";
     isViewer?: boolean;
     overrideParticipants?: ReturnType<typeof useSync>['participants'];
@@ -17,7 +19,8 @@ interface SessionLobbyProps {
     isMusicPlaying?: boolean;
 }
 
-const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl, isViewer = false, overrideParticipants, location, onFadeOutMusic, isMusicPlaying = false }) => {
+const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, onBack, hostControl, isViewer = false, overrideParticipants, location, onFadeOutMusic, isMusicPlaying = false }) => {
+    const { lang } = useLanguage();
     console.log("Lobby hostControl:", hostControl);
     const { sessionId, participants: syncParticipants, sessionData, registerParticipant } = useSync();
     const participants = overrideParticipants ?? syncParticipants;
@@ -283,6 +286,14 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
                 </div>
 
                 <div className="flex gap-4">
+                    {onBack && (
+                        <button
+                            onClick={onBack}
+                            className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/30 font-bold px-8 py-5 rounded-[2rem] transition-all flex items-center gap-3 active:scale-95 animate-fade-in"
+                        >
+                            <LogOut size={24} /> {lang === 'es' ? 'SALIR AL MENÚ' : 'RETURN TO MENU'}
+                        </button>
+                    )}
                     <button
                         className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-10 py-5 rounded-[2rem] transition-all flex items-center gap-3"
                     >

@@ -38,6 +38,8 @@ const DEFAULT_SETTINGS = {
     { id: "default-org-2", role: "Game Master & Host", name: "Nidmyake Mwakalyeye" },
     { id: "default-org-3", role: "Technical Director", name: "Antigravity AI Engineers" }
   ],
+  timerStartMode: "auto" as const,
+  advanceMode: "host" as const,
 };
 
 const uuid = () => crypto.randomUUID();
@@ -548,6 +550,37 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
             <option value="ipad">iPad Mode (Remote)</option>
             <option value="manual">Manual Mode (PC)</option>
           </select>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <label className="block font-semibold mb-1">⏱️ Timer Countdown Trigger</label>
+          <select
+            value={showDraft.settings.timerStartMode || "auto"}
+            onChange={(e) => updateSettings({ timerStartMode: e.target.value as any })}
+            className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
+          >
+            <option value="auto">Automatic Countdown Start (Inicio Automático)</option>
+            <option value="host">Host Activated Countdown Start (Inicio por Presentador)</option>
+          </select>
+          <p className="text-xs text-text-secondary mt-1">
+            Determines if the question timer starts automatically or requires host activation.
+          </p>
+        </div>
+        <div>
+          <label className="block font-semibold mb-1">🔄 Pacing & Advance Mode</label>
+          <select
+            value={showDraft.settings.advanceMode || "host"}
+            onChange={(e) => updateSettings({ advanceMode: e.target.value as any })}
+            className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
+          >
+            <option value="host">Host-Led Advance (Avance Manual por Presentador)</option>
+            <option value="autonomous">Autonomous / Semiautonomous Advance (Avance Autónomo)</option>
+          </select>
+          <p className="text-xs text-text-secondary mt-1">
+            Determines if the host must manually trigger every stage (rebounds, answers) or if they advance automatically.
+          </p>
         </div>
       </div>
       <div>
@@ -1337,6 +1370,24 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
           <div className="p-3 rounded-lg bg-base-100 border border-base-300">
             <p className="text-sm text-text-secondary uppercase font-bold text-xs">Rounds</p>
             <p className="text-2xl font-bold">{showDraft.settings.totalRounds}</p>
+          </div>
+        </div>
+        <div className="grid md:grid-cols-2 gap-4 mt-4 pt-3 border-t border-base-300 text-sm">
+          <div>
+            <span className="text-text-secondary font-bold">Timer Mode:</span>{" "}
+            <span className="font-semibold text-brand-primary">
+              {showDraft.settings.timerStartMode === "host"
+                ? "Host Activated Countdown"
+                : "Automatic Countdown"}
+            </span>
+          </div>
+          <div>
+            <span className="text-text-secondary font-bold">Advance Mode:</span>{" "}
+            <span className="font-semibold text-brand-primary">
+              {showDraft.settings.advanceMode === "autonomous"
+                ? "Autonomous / Semiautonomous"
+                : "Host-Led Advance"}
+            </span>
           </div>
         </div>
       </div>

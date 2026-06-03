@@ -346,6 +346,8 @@ export interface ShowSettings {
   winnerTitle?: string;
   thankYouMessage?: string;
   organizers?: Organizer[];
+  timerStartMode?: "auto" | "host";
+  advanceMode?: "autonomous" | "host";
 }
 
 export interface ShowRound {

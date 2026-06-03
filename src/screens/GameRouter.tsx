@@ -51,6 +51,7 @@ interface GameRouterProps {
   teamScores: Record<string, number>;
   onScoreChange: (teamId: string, score: number) => void;
   onExit: (points?: Record<string, number>) => void;
+  onReturnToMainMenu?: (points?: Record<string, number>) => void;
   language?: "en" | "es";
   hostControl?: "ipad" | "manual";
   playerControl?: "ipad" | "manual";
@@ -63,6 +64,7 @@ const GameRouter: React.FC<GameRouterProps> = ({
   teamScores,
   onScoreChange,
   onExit,
+  onReturnToMainMenu,
   language,
   hostControl = 'ipad',
   playerControl = 'ipad',
@@ -153,6 +155,7 @@ const GameRouter: React.FC<GameRouterProps> = ({
       teamScores={teamScores}
       onScoreChange={onScoreChange}
       onExit={onExit}
+      onReturnToMainMenu={onReturnToMainMenu}
       hostControl={hostControl}
       playerControl={playerControl}
       isViewer={isViewer}

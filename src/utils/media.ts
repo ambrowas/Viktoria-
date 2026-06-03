@@ -13,6 +13,22 @@ export const resolveMediaUrl = (url?: string) => {
     return url;
   }
 
+  // Normalize absolute paths that point to local Application Support uploads
+  // e.g. /Users/.../Application Support/.../uploads/filename.ext
+  if (url.includes("uploads/")) {
+    const filename = url.split("uploads/").pop();
+    if (filename) {
+      const normalizedRelative = `images/uploads/${filename}`;
+      // In development or when loaded via HTTP, root-relative is best
+      if (window.location.protocol !== "file:") {
+        return `/${normalizedRelative}`;
+      } else {
+        // In production loaded via file://, a relative path (no leading slash) is required
+        return normalizedRelative;
+      }
+    }
+  }
+
   // Check if it's an absolute path (starts with / or a Windows drive letter like C:\)
   const isAbsolute = url.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(url);
 
@@ -22,8 +38,9 @@ export const resolveMediaUrl = (url?: string) => {
   }
 
   // For relative paths (like 'images/uploads/...'):
-  // 1. If we are in Electron development/production, we want to try to resolve it
-  //    relative to the 'public' folder or the app root.
-  // We use the browser's ability to resolve root-relative paths for anything in 'public'
-  return `/${url}`;
+  if (window.location.protocol !== "file:") {
+    return `/${url}`;
+  }
+  return url;
 };
+

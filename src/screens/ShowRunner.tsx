@@ -274,14 +274,12 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
         if (ts > 0 && ts <= lastCommandTimestamp.current) return;
         if (ts > 0) lastCommandTimestamp.current = ts;
 
-        const { type, payload } = cmd;
+        const { type } = cmd;
 
         if (type === 'next_game') {
             // Only trigger if we are in a state that allows "Next"
             if (step === 'leaderboard' || step === 'intro' || step === 'lobby') {
                 nextAction();
-                // Clear the command to avoid loops if needed, 
-                // but usually the Host clears it or it's a timestamped packet
             }
         }
 
@@ -293,7 +291,17 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
             setStep('lobby');
             setCountdown(20);
         }
-    }, [isRemoteMode, sessionData?.hostCommand, step]);
+
+        if (type === 'exit_show') {
+            onExit();
+        }
+
+        if (type === 'return_to_menu') {
+            if (step !== 'playing' || !currentGame || currentGame.type !== 'JEOPARDY') {
+                handleSaveAndExitMidGame();
+            }
+        }
+    }, [isRemoteMode, sessionData?.hostCommand, step, currentGame, onExit]);
 
     const handleFinishGame = (earnedPoints?: Record<string, number>) => {
         if (earnedPoints) {
@@ -321,6 +329,22 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
         } else {
             setStep("leaderboard");
         }
+    };
+
+    const handleSaveAndExitMidGame = (earnedPoints?: Record<string, number>) => {
+        if (earnedPoints) {
+            setTeamScores((prev) => {
+                const next = { ...prev };
+                Object.entries(earnedPoints).forEach(([teamId, points]) => {
+                    next[teamId] = (next[teamId] || 0) + points;
+                });
+                return next;
+            });
+        }
+        setStep("leaderboard");
+        setTimeout(() => {
+            onExit();
+        }, 150);
     };
 
     const fadeOutIntro = (onComplete: () => void) => {
@@ -392,6 +416,7 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
                         playerControl={playerControl}
                         isViewer={isViewer}
                         onExit={(points) => handleFinishGame(points)}
+                        onReturnToMainMenu={handleSaveAndExitMidGame}
                     />
                 </div>
             </div>
@@ -483,6 +508,14 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
                         <SessionLobby
                             teams={show.teams}
                             onStart={() => nextAction()}
+                            onBack={() => {
+                                const confirmMsg = show.settings.language === "es"
+                                    ? "¿Seguro que quieres salir y volver al panel principal?"
+                                    : "Are you sure you want to exit and return to the dashboard?";
+                                if (window.confirm(confirmMsg)) {
+                                    onExit();
+                                }
+                            }}
                             hostControl={hostControl}
                             isViewer={isViewer}
                             overrideParticipants={isViewer ? viewerParticipants : undefined}

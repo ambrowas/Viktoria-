@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSync } from '@/context/SyncContext';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLanguage } from '@/context/LanguageContext';
 import {
     Music,
     Volume2,
@@ -17,10 +18,12 @@ import {
     Pause,
     Play,
     Home,
-    WifiOff
+    WifiOff,
+    LogOut
 } from 'lucide-react';
 
 const MasterControlPanel: React.FC = () => {
+    const { lang } = useLanguage();
     const {
         sessionData,
         updateSession,
@@ -39,6 +42,9 @@ const MasterControlPanel: React.FC = () => {
     if (!sessionData) return null;
 
     const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+    const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+    const [showReturnConfirm, setShowReturnConfirm] = useState(false);
+    const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
     const teamScores = sessionData.teamScores || {};
 
@@ -143,22 +149,34 @@ const MasterControlPanel: React.FC = () => {
             <div className="flex items-center gap-3">
                 {isRemoteMode && (
                     <button
-                        onClick={() => {
-                            if (window.confirm("¿Seguro que quieres DESCONECTAR el iPad de esta partida? El juego continuará en la PC.")) {
-                                leaveSession();
-                            }
-                        }}
+                        onClick={() => setShowDisconnectConfirm(true)}
                         className="p-3 bg-slate-800 text-slate-400 rounded-xl border border-white/5 hover:bg-red-500/20 hover:text-red-500 hover:border-red-500/20 transition-all shadow-xl active:scale-95"
-                        title="Disconnect iPad (Stop Sync)"
+                        title={lang === 'es' ? "Desconectar iPad" : "Disconnect iPad (Stop Sync)"}
                     >
                         <WifiOff size={22} />
                     </button>
                 )}
                 
                 <button
+                    onClick={() => setShowRestartConfirm(true)}
+                    className="p-3 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 hover:bg-amber-500/20 transition-all shadow-xl active:scale-95"
+                    title={lang === 'es' ? "Reiniciar Juego" : "Restart Current Game"}
+                >
+                    <RotateCcw size={22} />
+                </button>
+
+                <button
+                    onClick={() => setShowReturnConfirm(true)}
+                    className="p-3 bg-blue-500/10 text-blue-400 rounded-xl border border-blue-500/20 hover:bg-blue-500/20 transition-all shadow-xl active:scale-95"
+                    title={lang === 'es' ? "Volver al Menú Principal" : "Return to Main Menu"}
+                >
+                    <LogOut size={22} />
+                </button>
+
+                <button
                     onClick={() => setShowQuitConfirm(true)}
                     className="p-3 bg-red-500/10 text-red-500 rounded-xl border border-red-500/20 hover:bg-red-500/20 transition-all shadow-xl active:scale-95"
-                    title="Quit to Lobby / Exit Quick Play"
+                    title={lang === 'es' ? "Volver al Lobby" : "Quit to Lobby / Exit Quick Play"}
                 >
                     <Home size={22} />
                 </button>
@@ -181,6 +199,8 @@ const MasterControlPanel: React.FC = () => {
                     </button>
                 )}
             </div>
+
+
 
             {/* Manual Override Tray */}
             <AnimatePresence>
@@ -278,15 +298,21 @@ const MasterControlPanel: React.FC = () => {
                             className="bg-slate-900 border border-red-500/40 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"
                         >
                             <Home className="text-red-500 w-16 h-16 mx-auto mb-4" />
-                            <h2 className="text-2xl font-black text-white mb-2">Are you sure?</h2>
-                            <p className="text-slate-300 mb-8">Do you want to quit the current game and return to the lobby?</p>
+                            <h2 className="text-2xl font-black text-white mb-2">
+                                {lang === "es" ? "¿Estás seguro?" : "Are you sure?"}
+                            </h2>
+                            <p className="text-slate-300 mb-8 text-sm">
+                                {lang === "es"
+                                    ? "¿Deseas salir del juego actual y volver al lobby de la sesión?"
+                                    : "Do you want to quit the current game and return to the lobby?"}
+                            </p>
                             
                             <div className="flex gap-4">
                                 <button
                                     onClick={() => setShowQuitConfirm(false)}
                                     className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold hover:bg-slate-700 transition"
                                 >
-                                    Cancel
+                                    {lang === "es" ? "Cancelar" : "Cancel"}
                                 </button>
                                 <button
                                     onClick={() => {
@@ -295,7 +321,160 @@ const MasterControlPanel: React.FC = () => {
                                     }}
                                     className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-500 transition shadow-[0_0_20px_rgba(220,38,38,0.4)]"
                                 >
-                                    Quit
+                                    {lang === "es" ? "Salir" : "Quit"}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Custom Restart Confirmation Modal */}
+            <AnimatePresence>
+                {showRestartConfirm && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-slate-900 border border-amber-500/40 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"
+                        >
+                            <RotateCcw className="text-amber-500 w-16 h-16 mx-auto mb-4" />
+                            <h2 className="text-2xl font-black text-white mb-2">
+                                {lang === "es" ? "¿Reiniciar Juego?" : "Restart Game?"}
+                            </h2>
+                            <p className="text-slate-300 mb-8 text-sm">
+                                {lang === "es"
+                                    ? "¿Estás seguro de que quieres reiniciar el juego actual? Esto restablecerá todas las preguntas y puntuaciones para esta partida."
+                                    : "Are you sure you want to restart the current game? This will reset all questions and scores for this match."}
+                            </p>
+                            
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => setShowRestartConfirm(false)}
+                                    className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold hover:bg-slate-700 transition"
+                                >
+                                    {lang === "es" ? "Cancelar" : "Cancel"}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowRestartConfirm(false);
+                                        updateSession({
+                                            hostCommand: {
+                                                type: 'restart_game',
+                                                payload: {},
+                                                timestamp: Date.now()
+                                            }
+                                        });
+                                    }}
+                                    className="flex-1 py-3 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-500 transition shadow-[0_0_20px_rgba(245,158,11,0.4)]"
+                                >
+                                    {lang === "es" ? "Reiniciar" : "Restart"}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Custom Return to Menu Confirmation Modal */}
+            <AnimatePresence>
+                {showReturnConfirm && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-slate-900 border border-blue-500/40 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"
+                        >
+                            <LogOut className="text-blue-400 w-16 h-16 mx-auto mb-4" />
+                            <h2 className="text-2xl font-black text-white mb-2">
+                                {lang === "es" ? "¿Volver al Menú?" : "Return to Menu?"}
+                            </h2>
+                            <p className="text-slate-300 mb-8 text-sm">
+                                {lang === "es"
+                                    ? "¿Seguro que quieres guardar el progreso actual y volver al menú principal?"
+                                    : "Are you sure you want to save current progress and return to the main menu?"}
+                            </p>
+                            
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => setShowReturnConfirm(false)}
+                                    className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold hover:bg-slate-700 transition"
+                                >
+                                    {lang === "es" ? "Cancelar" : "Cancel"}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowReturnConfirm(false);
+                                        updateSession({
+                                            hostCommand: {
+                                                type: 'return_to_menu',
+                                                payload: {},
+                                                timestamp: Date.now()
+                                            }
+                                        });
+                                    }}
+                                    className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 transition shadow-[0_0_20px_rgba(37,99,235,0.4)]"
+                                >
+                                    {lang === "es" ? "Salir" : "Exit"}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Custom Disconnect Confirmation Modal */}
+            <AnimatePresence>
+                {showDisconnectConfirm && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-slate-900 border border-slate-500/40 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"
+                        >
+                            <WifiOff className="text-slate-400 w-16 h-16 mx-auto mb-4" />
+                            <h2 className="text-2xl font-black text-white mb-2">
+                                {lang === "es" ? "¿Desconectar?" : "Disconnect iPad?"}
+                            </h2>
+                            <p className="text-slate-300 mb-8 text-sm">
+                                {lang === "es"
+                                    ? "¿Seguro que quieres desconectar el iPad de esta partida? El juego continuará en la PC."
+                                    : "Are you sure you want to disconnect the iPad from this game? The match will continue on the PC."}
+                            </p>
+                            
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => setShowDisconnectConfirm(false)}
+                                    className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold hover:bg-slate-700 transition"
+                                >
+                                    {lang === "es" ? "Cancelar" : "Cancel"}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowDisconnectConfirm(false);
+                                        leaveSession();
+                                    }}
+                                    className="flex-1 py-3 rounded-xl bg-slate-600 text-white font-bold hover:bg-slate-500 transition shadow-[0_0_20px_rgba(148,163,184,0.4)]"
+                                >
+                                    {lang === "es" ? "Desconectar" : "Disconnect"}
                                 </button>
                             </div>
                         </motion.div>

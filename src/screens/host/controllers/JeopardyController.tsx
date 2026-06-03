@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSync } from '@/context/SyncContext';
 import { JeopardyGame, JeopardyCategory, JeopardyQuestion } from '@/types';
-import { motion } from 'framer-motion';
-import { CheckCircle, XCircle, Info, Eye, Music } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CheckCircle, XCircle, Info, Eye, Music, RotateCcw } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface JeopardyControllerProps {
     game: JeopardyGame;
@@ -11,6 +12,8 @@ interface JeopardyControllerProps {
 }
 
 const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionData, updateSession }) => {
+    const { lang } = useLanguage();
+    const [showRestartConfirm, setShowRestartConfirm] = useState(false);
     const { sessionState } = sessionData;
     const usedIds = new Set<string>(sessionData.usedQuestionIds || []);
     const activeQuestionId = sessionData.activeQuestionId;
@@ -272,23 +275,10 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                             <h2 className="text-2xl font-black text-white">{game.name || 'Jeopardy Grid'}</h2>
                         </div>
                         <button
-                            onClick={() => {
-                                if (window.confirm("Are you sure you want to RESTART the grid? This will make all questions available again.")) {
-                                    updateSession({
-                                        usedQuestionIds: [],
-                                        activeQuestionId: null,
-                                        isAnswerRevealed: false,
-                                        feedback: null,
-                                        currentTeamIndex: 0,
-                                        cardView: "score",
-                                        attemptedTeamIndices: [],
-                                        hasReboundAttempted: false
-                                    });
-                                }
-                            }}
-                            className="bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-[0_0_15px_rgba(239,68,68,0.1)]"
+                            onClick={() => setShowRestartConfirm(true)}
+                            className="bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-[0_0_15px_rgba(245,158,11,0.1)]"
                         >
-                            Reset Grid
+                            {lang === "es" ? "Reiniciar Juego" : "Restart Game"}
                         </button>
                     </div>
 
@@ -320,6 +310,59 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                     ))}
                 </div>
             )}
+
+            {/* Custom Restart Confirmation Modal */}
+            <AnimatePresence>
+                {showRestartConfirm && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-slate-900 border border-amber-500/40 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"
+                        >
+                            <RotateCcw className="text-amber-500 w-16 h-16 mx-auto mb-4" />
+                            <h2 className="text-2xl font-black text-white mb-2">
+                                {lang === "es" ? "¿Reiniciar Juego?" : "Restart Game?"}
+                            </h2>
+                            <p className="text-slate-300 mb-8 text-sm">
+                                {lang === "es"
+                                    ? "¿Estás seguro de que quieres reiniciar el juego actual? Esto restablecerá todas las preguntas y puntuaciones para esta partida."
+                                    : "Are you sure you want to restart the current game? This will reset all questions and scores for this match."}
+                            </p>
+                            
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => setShowRestartConfirm(false)}
+                                    className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold hover:bg-slate-700 transition"
+                                >
+                                    {lang === "es" ? "Cancelar" : "Cancel"}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowRestartConfirm(false);
+                                        updateSession({
+                                            hostCommand: {
+                                                type: 'restart_game',
+                                                payload: {},
+                                                timestamp: Date.now()
+                                            }
+                                        });
+                                    }}
+                                    className="flex-1 py-3 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-500 transition shadow-[0_0_20px_rgba(245,158,11,0.4)]"
+                                >
+                                    {lang === "es" ? "Reiniciar" : "Restart"}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
