@@ -1,10 +1,8 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import Lottie from "lottie-react";
 import { JeopardyGame, JeopardyCategory, JeopardyQuestion, JeopardyTurnMode } from "@/types";
 import { useSync } from "@/context/SyncContext";
-import { correctSound, wrongSound } from "@/utils/sound";
+import { correctSound, wrongSound, timerSound } from "@/utils/sound";
 import { resolveMediaUrl } from "@/utils/media";
-import fireworksAnimation from "@/assets/animations/fireworks.json";
 
 const TIMER_DURATION = 30;
 const CARD_BACK_IMG = resolveMediaUrl("images/TADTSlogo.jpg");
@@ -58,23 +56,13 @@ const TimerCircle: React.FC<{ timeLeft: number; duration: number }> = ({ timeLef
   );
 };
 
-// ── Feedback overlay (unchanged from original) ────────────────────────────────
-const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" }> = ({ type }) => {
-  const isCorrect = type === "correct";
-  return (
-    <div key={type} className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 animate-fade-in">
-      {isCorrect ? (
-        <div className="w-full h-full"><Lottie animationData={fireworksAnimation} loop={false} /></div>
-      ) : (
-        <div className="flex items-center justify-center w-48 h-48 rounded-full bg-red-500/30 animate-shake">
-          <span className="text-9xl text-red-400">✖</span>
-        </div>
-      )}
-    </div>
-  );
-};
+
 
 const otherTeam = (team: 0 | 1) => (team === 0 ? 1 : 0) as 0 | 1;
+
+const hasVisualMedia = (url?: string, type?: string) => {
+  return !!url && (type === "IMAGE" || type === "VIDEO");
+};
 
 // ── TV score overlay (cards shown center of board) ────────────────────────────
 const TVScoreOverlay: React.FC<{
@@ -84,17 +72,71 @@ const TVScoreOverlay: React.FC<{
   teamScores: [number, number];
   teamLabels: [string, string];
   timeLeft: number;
-}> = ({ active, cardView, currentTeamIndex, teamScores, teamLabels, timeLeft }) => {
+  activeClue: ActiveClueState | null;
+  hasReboundAttempted: boolean;
+}> = ({ active, cardView, currentTeamIndex, teamScores, teamLabels, timeLeft, activeClue, hasReboundAttempted }) => {
   if (!active) return null;
 
   return (
     <div className="absolute inset-0 flex items-center justify-center z-20 bg-slate-950/90 backdrop-blur-md pointer-events-none">
-      <div className="flex flex-col items-center gap-6 w-full max-w-6xl p-8 h-full justify-center pointer-events-auto">
+      <div className="flex flex-col items-center gap-4 w-full max-w-[95vw] p-6 h-full max-h-[92vh] justify-center pointer-events-auto relative overflow-hidden">
+        {/* Absolute Timer in Top Right */}
+        {cardView === "question" && (
+          <div className="absolute top-6 right-8 flex items-center gap-4 z-30 bg-blue-950/95 border-2 border-blue-500/40 px-6 py-3.5 rounded-2xl shadow-2xl shrink-0">
+            {activeClue && (
+              <div className="flex items-center gap-2 bg-blue-500/25 border border-blue-400/40 px-4 py-2 rounded-xl text-blue-200 text-xs font-black uppercase tracking-wider animate-pulse mr-2 shrink-0">
+                <span className="text-base">💡</span>
+                <span>
+                  {activeClue.type === "CALL_FRIEND" && "Call Friend"}
+                  {activeClue.type === "ASK_HOST" && "Ask Host"}
+                  {activeClue.type === "ASK_OTHER_TEAM" && "Ask Team"}
+                </span>
+              </div>
+            )}
+            <div className="flex flex-col items-center">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-300">Time</span>
+              <span className={`text-6xl font-black tabular-nums transition-colors ${timeLeft <= 5 ? "text-red-400 animate-pulse" : "text-yellow-300"}`}>
+                {timeLeft}
+              </span>
+            </div>
+            {/* Tiny progress bar */}
+            <div className="w-24 h-2.5 bg-blue-900 rounded-full overflow-hidden border border-blue-700/60 shrink-0">
+              <div
+                className={`h-full rounded-full transition-all duration-1000 ${timeLeft <= 5 ? "bg-red-500" : "bg-yellow-400"}`}
+                style={{ width: `${(timeLeft / TIMER_DURATION) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Category + points */}
         <div className="text-center shrink-0">
-          <p className="text-4xl font-black uppercase text-yellow-300 drop-shadow-lg tracking-wide">{active.category.name}</p>
-          <p className="text-2xl font-bold text-yellow-200">{active.question.points} pts</p>
+          <p className="text-5xl font-black uppercase text-yellow-300 drop-shadow-lg tracking-wide">{active.category.name}</p>
+          <p className="text-3xl font-bold text-yellow-200 mt-1">{active.question.points} pts</p>
         </div>
+
+        {/* Team Scores Bar */}
+        {cardView !== "question" && (
+          <div className="flex gap-6 shrink-0 mb-4">
+            {([0, 1] as const).map(i => (
+              <div
+                key={i}
+                className={`transition-all flex items-center gap-4 ${
+                  cardView === "answer"
+                    ? "px-8 py-3.5 rounded-3xl border-4 scale-105"
+                    : "px-6 py-2.5 rounded-2xl border-2"
+                } ${
+                  currentTeamIndex === i
+                    ? "border-yellow-400 bg-yellow-400/20 shadow-lg"
+                    : "border-blue-500/40 bg-blue-900/40"
+                }`}
+              >
+                <span className={`${cardView === "answer" ? "text-2xl" : "text-lg"} font-extrabold text-slate-200`}>{teamLabels[i]}</span>
+                <span className={`${cardView === "answer" ? "text-5xl" : "text-4xl"} font-black text-yellow-300`}>{teamScores[i]}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Score cards */}
         {cardView === "score" && (
@@ -118,68 +160,199 @@ const TVScoreOverlay: React.FC<{
 
         {/* Question view */}
         {cardView === "question" && (
-          active.question.questionMediaUrl && active.question.questionMediaType ? (
-            <div className="grid grid-cols-12 gap-8 w-full items-center min-h-0 flex-1">
-              {/* Left Column: Media (7 cols) */}
-              <div className="col-span-7 bg-blue-950/40 border border-blue-500/30 rounded-2xl p-4 flex justify-center items-center h-full max-h-[500px] overflow-hidden">
-                {active.question.questionMediaType === "IMAGE" && (
-                  <img src={resolveMediaUrl(active.question.questionMediaUrl)} alt="Question" className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" />
-                )}
-                {active.question.questionMediaType === "AUDIO" && (
-                  <div className="w-full flex flex-col items-center justify-center p-8 bg-blue-900/40 rounded-xl">
-                    <span className="text-6xl mb-4">🎵</span>
-                    <audio controls autoPlay src={resolveMediaUrl(active.question.questionMediaUrl)} className="w-full max-w-md" />
+          <div className="flex-1 w-full flex flex-col min-h-0 justify-center">
+            {active.question.questionMediaUrl && active.question.questionMediaType ? (
+              <div className="grid grid-cols-12 gap-8 w-full items-center min-h-0 flex-1">
+                {/* Left Column: Media (7 cols) */}
+                <div className="col-span-7 bg-blue-950/40 border border-blue-500/30 rounded-2xl p-4 flex justify-center items-center h-full max-h-[52vh] overflow-hidden">
+                  {active.question.questionMediaType === "IMAGE" && (
+                    <img src={resolveMediaUrl(active.question.questionMediaUrl)} alt="Question" className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" />
+                  )}
+                  {active.question.questionMediaType === "AUDIO" && (
+                    <div className="w-full flex flex-col items-center justify-center p-8 bg-blue-900/40 rounded-xl">
+                      <span className="text-7xl mb-4">🎵</span>
+                      <audio controls autoPlay src={resolveMediaUrl(active.question.questionMediaUrl)} className="w-full max-w-md" />
+                    </div>
+                  )}
+                  {active.question.questionMediaType === "VIDEO" && (
+                    <video controls autoPlay src={resolveMediaUrl(active.question.questionMediaUrl)} className="max-w-full max-h-full rounded-xl object-contain" />
+                  )}
+                </div>
+
+                {/* Right Column: Question Text, Clues (5 cols) */}
+                <div className="col-span-5 flex flex-col gap-4 items-center text-center justify-center h-full max-h-[52vh] overflow-hidden">
+                  <div className="bg-blue-900/85 backdrop-blur rounded-2xl px-6 py-5 border border-blue-400/40 shadow-2xl w-full">
+                    <p className="text-3xl md:text-4xl lg:text-5xl font-black leading-relaxed text-white">{active.question.question || "?"}</p>
+                  </div>
+
+                  {activeClue && (
+                    <div className="bg-blue-900/50 rounded-xl p-3 border border-blue-500/40 w-full text-center space-y-1 animate-fade-in shrink-0">
+                      <p className="text-blue-100 font-bold text-lg">
+                        {activeClue.type === "CALL_FRIEND" && `${teamLabels[activeClue.usedBy]} is calling a friend.`}
+                        {activeClue.type === "ASK_HOST" && `${teamLabels[activeClue.usedBy]} asked the host.`}
+                        {activeClue.type === "ASK_OTHER_TEAM" && `${teamLabels[activeClue.usedBy]} asked ${teamLabels[activeClue.targetTeam ?? otherTeam(activeClue.usedBy)]} to answer.`}
+                      </p>
+                    </div>
+                  )}
+
+                  {hasReboundAttempted && !activeClue && (
+                    <div className="bg-amber-900/50 rounded-xl p-3 border border-amber-500/40 w-full text-center animate-fade-in shrink-0">
+                      <p className="text-amber-100 font-bold text-lg">Rebound! {teamLabels[currentTeamIndex]} gets a chance to answer.</p>
+                    </div>
+                  )}
+
+                  {!activeClue && !hasReboundAttempted && (
+                    <div className="bg-blue-900/40 rounded-full px-5 py-1.5 border border-blue-500/30 text-yellow-300 font-bold text-lg animate-pulse shrink-0">
+                      Turn: {teamLabels[currentTeamIndex]}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* No media layouts */
+              <div className="max-w-5xl text-center space-y-6 flex flex-col items-center justify-center flex-1 mx-auto w-full overflow-hidden">
+                <div className="bg-blue-900/85 backdrop-blur rounded-2xl px-12 py-8 border border-blue-400/40 shadow-2xl w-full">
+                  <p className="text-4xl md:text-5xl lg:text-6xl font-black leading-relaxed text-white">{active.question.question || "?"}</p>
+                </div>
+
+                {activeClue && (
+                  <div className="bg-blue-900/50 rounded-xl p-4 border border-blue-500/40 w-full text-center space-y-1 animate-fade-in shrink-0">
+                    <p className="text-blue-100 font-bold text-xl">
+                      {activeClue.type === "CALL_FRIEND" && `${teamLabels[activeClue.usedBy]} is calling a friend.`}
+                      {activeClue.type === "ASK_HOST" && `${teamLabels[activeClue.usedBy]} asked the host.`}
+                      {activeClue.type === "ASK_OTHER_TEAM" && `${teamLabels[activeClue.usedBy]} asked ${teamLabels[activeClue.targetTeam ?? otherTeam(activeClue.usedBy)]} to answer.`}
+                    </p>
                   </div>
                 )}
-                {active.question.questionMediaType === "VIDEO" && (
-                  <video controls autoPlay src={resolveMediaUrl(active.question.questionMediaUrl)} className="max-w-full max-h-full rounded-xl object-contain" />
+
+                {hasReboundAttempted && !activeClue && (
+                  <div className="bg-amber-900/50 rounded-xl p-3 border border-amber-500/40 w-full text-center animate-fade-in shrink-0">
+                    <p className="text-amber-100 font-bold text-xl">Rebound! {teamLabels[currentTeamIndex]} gets a chance to answer.</p>
+                  </div>
+                )}
+
+                {!activeClue && !hasReboundAttempted && (
+                  <div className="bg-blue-900/40 rounded-full px-6 py-2 border border-blue-500/30 text-yellow-300 font-bold text-xl animate-pulse shrink-0">
+                    Turn: {teamLabels[currentTeamIndex]}
+                  </div>
                 )}
               </div>
-
-              {/* Right Column: Question Text & Timer (5 cols) */}
-              <div className="col-span-5 flex flex-col gap-6 items-center text-center justify-center h-full">
-                <div className="bg-blue-900/85 backdrop-blur rounded-2xl px-8 py-6 border border-blue-400/40 shadow-2xl w-full">
-                  <p className="text-3xl leading-relaxed font-semibold text-white">{active.question.question || "?"}</p>
-                </div>
-                {/* Timer bar */}
-                <div className="w-full max-w-xs h-3 bg-blue-950 rounded-full overflow-hidden border border-blue-700">
-                  <div
-                    className={`h-full rounded-full transition-all duration-1000 ${timeLeft <= 5 ? "bg-red-500" : "bg-yellow-400"}`}
-                    style={{ width: `${(timeLeft / TIMER_DURATION) * 100}%` }}
-                  />
-                </div>
-                <p className="text-6xl font-black tabular-nums text-yellow-300">{timeLeft}</p>
-              </div>
-            </div>
-          ) : (
-            /* No media layouts */
-            <div className="max-w-3xl text-center space-y-6 flex flex-col items-center justify-center flex-1">
-              <div className="bg-blue-900/85 backdrop-blur rounded-2xl px-12 py-8 border border-blue-400/40 shadow-2xl">
-                <p className="text-4xl leading-relaxed font-semibold text-white">{active.question.question || "?"}</p>
-              </div>
-              {/* Timer bar */}
-              <div className="w-72 h-3 bg-blue-950 rounded-full overflow-hidden border border-blue-700">
-                <div
-                  className={`h-full rounded-full transition-all duration-1000 ${timeLeft <= 5 ? "bg-red-500" : "bg-yellow-400"}`}
-                  style={{ width: `${(timeLeft / TIMER_DURATION) * 100}%` }}
-                />
-              </div>
-              <p className="text-6xl font-black tabular-nums text-yellow-300">{timeLeft}</p>
-            </div>
-          )
+            )}
+          </div>
         )}
 
         {/* Answer view */}
         {cardView === "answer" && (
-          <div className="max-w-3xl text-center">
-            <div className="bg-emerald-900/85 backdrop-blur rounded-2xl px-14 py-10 border-2 border-emerald-400 shadow-2xl">
-              <p className="text-xl text-emerald-300 font-bold mb-4 uppercase tracking-widest">Correct Answer</p>
-              <p className="text-6xl font-black text-white">{active.question.correctAnswer || "—"}</p>
-              {active.question.explanation?.trim() && (
-                <p className="mt-6 text-xl text-emerald-200">{active.question.explanation}</p>
-              )}
-            </div>
+          <div className="max-w-[95vw] w-full text-center flex flex-col min-h-0 justify-center">
+            {hasVisualMedia(active.question.answerMediaUrl, active.question.answerMediaType) || hasVisualMedia(active.question.questionMediaUrl, active.question.questionMediaType) ? (
+              <div className="grid grid-cols-12 gap-8 w-full items-center min-h-0 flex-1">
+                {/* Left Column: Answer/Question Media (7 cols) */}
+                <div className="col-span-7 bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-4 flex justify-center items-center h-full max-h-[52vh] overflow-hidden">
+                  {hasVisualMedia(active.question.answerMediaUrl, active.question.answerMediaType) ? (
+                    <>
+                      {active.question.answerMediaType === "IMAGE" && (
+                        <img src={resolveMediaUrl(active.question.answerMediaUrl)} alt="Answer media" className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" />
+                      )}
+                      {active.question.answerMediaType === "VIDEO" && (
+                        <video controls src={resolveMediaUrl(active.question.answerMediaUrl)} className="max-w-full max-h-full rounded-xl object-contain" />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {active.question.questionMediaType === "IMAGE" && (
+                        <img src={resolveMediaUrl(active.question.questionMediaUrl)} alt="Question media" className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" />
+                      )}
+                      {active.question.questionMediaType === "VIDEO" && (
+                        <video controls src={resolveMediaUrl(active.question.questionMediaUrl)} className="max-w-full max-h-full rounded-xl object-contain" />
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Right Column: Correct Answer details (5 cols) */}
+                <div className="col-span-5 flex flex-col gap-6 items-center text-center justify-center h-full max-h-[52vh] overflow-hidden">
+                  <div className="bg-emerald-900/85 backdrop-blur rounded-2xl px-6 py-8 border-2 border-emerald-400 shadow-2xl w-full">
+                    <p className="text-lg text-emerald-300 font-bold mb-3 uppercase tracking-widest">Correct Answer</p>
+                    <p className="text-5xl md:text-6xl font-black text-white">{active.question.correctAnswer || "—"}</p>
+                    {active.question.explanation?.trim() && (
+                      <p className="mt-4 text-xl md:text-2xl text-emerald-200 leading-relaxed border-t border-emerald-800 pt-3">{active.question.explanation}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* No media answer layout */
+              <div className="bg-emerald-900/85 backdrop-blur rounded-2xl px-14 py-10 border-2 border-emerald-400 shadow-2xl max-w-5xl mx-auto w-full">
+                <p className="text-xl text-emerald-300 font-bold mb-4 uppercase tracking-widest">Correct Answer</p>
+                <p className="text-7xl md:text-8xl font-black text-white">{active.question.correctAnswer || "—"}</p>
+                {active.question.explanation?.trim() && (
+                  <p className="mt-6 text-2xl md:text-3xl text-emerald-200 leading-relaxed border-t border-emerald-800 pt-4">{active.question.explanation}</p>
+                )}
+              </div>
+            )}
           </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" | null; correctAnswer?: string; points?: number }> = ({ type, correctAnswer, points }) => {
+  if (!type) return null;
+  const isCorrect = type === "correct";
+  return (
+    <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/85 backdrop-blur-sm transition-all duration-300">
+      <style>{`
+        @keyframes floatUpDown {
+          0% {
+            opacity: 0;
+            transform: translateY(20px) scale(0.8);
+          }
+          15% {
+            opacity: 0.7;
+            transform: translateY(0) scale(1.1);
+          }
+          30% {
+            opacity: 0.7;
+            transform: translateY(0) scale(1);
+          }
+          70% {
+            opacity: 0.7;
+            transform: translateY(-10px) scale(1);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-40px) scale(0.9);
+          }
+        }
+        .animate-float-up-down {
+          animation: floatUpDown 2s ease-in-out forwards;
+        }
+      `}</style>
+      <div
+        className={`px-16 py-10 rounded-3xl border-4 shadow-2xl flex flex-col items-center gap-4 text-center transform scale-105 transition-all max-w-[90vw] relative ${
+          isCorrect
+            ? "bg-emerald-950/95 border-emerald-400 text-emerald-300 shadow-emerald-900/50 animate-fade-in"
+            : "bg-red-950/95 border-red-500 text-red-400 shadow-red-900/50 animate-fade-in"
+        }`}
+      >
+        {points !== undefined && (
+          <div
+            className={`absolute -top-16 text-7xl md:text-8xl font-black tracking-widest select-none pointer-events-none opacity-0 animate-float-up-down ${
+              isCorrect ? "text-emerald-400/50" : "text-red-400/50"
+            }`}
+          >
+            {isCorrect ? `+${points}` : `-${points}`} PTS
+          </div>
+        )}
+        <span className="text-8xl">{isCorrect ? "🏆" : "❌"}</span>
+        <h2 className="text-5xl font-black uppercase tracking-wide mt-2 max-w-4xl leading-snug">
+          {isCorrect ? "Correct!" : "YOU HAVE THE WRONG ANSWER"}
+        </h2>
+        {!isCorrect && correctAnswer && (
+          <p className="text-3xl font-extrabold uppercase tracking-wide text-red-200 mt-2 max-w-4xl leading-relaxed">
+            THE CORRECT ANSWER IS: <span className="text-white font-black underline decoration-red-500 decoration-4 block mt-2 text-4xl">{correctAnswer}</span>
+          </p>
         )}
       </div>
     </div>
@@ -219,9 +392,9 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
   ]);
 
   // Keep latest state in ref so BC handler never has stale closure
-  const latestRef = useRef({ active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning });
+  const latestRef = useRef({ active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback });
   useEffect(() => {
-    latestRef.current = { active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning };
+    latestRef.current = { active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback };
   });
 
   // ── PC: BroadcastChannel → TV ─────────────────────────────────────────────
@@ -239,6 +412,8 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
           active: s.active, showAnswer: s.showAnswer, cardView: s.cardView,
           usedIds: Array.from(s.usedIds), currentTeamIndex: s.currentTeamIndex,
           teamScores: s.teamScores, timeLeft: s.timeLeft, isTimerRunning: s.isTimerRunning,
+          activeClue: s.activeClue, hasReboundAttempted: s.hasReboundAttempted,
+          feedback: s.feedback,
         });
       }
     };
@@ -253,15 +428,17 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
       active, showAnswer, cardView,
       usedIds: Array.from(usedIds), currentTeamIndex,
       teamScores, timeLeft, isTimerRunning,
+      activeClue, hasReboundAttempted,
+      feedback,
     });
-  }, [isViewer, active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning]);
+  }, [isViewer, active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback]);
 
   // ── TV: receive from PC ───────────────────────────────────────────────────
   useEffect(() => {
     if (!isViewer) return;
     const bc = new BroadcastChannel(JEOPARDY_BC);
     bc.onmessage = (ev) => {
-      const { type: t, active: a, showAnswer: sa, cardView: cv, usedIds: ui, currentTeamIndex: ct, teamScores: ts, timeLeft: tl } = ev.data;
+      const { type: t, active: a, showAnswer: sa, cardView: cv, usedIds: ui, currentTeamIndex: ct, teamScores: ts, timeLeft: tl, activeClue: ac, hasReboundAttempted: hr, feedback: fb } = ev.data;
       if (t === "STATE_UPDATE") {
         if (a !== undefined) setActive(a);
         if (sa !== undefined) setShowAnswer(sa);
@@ -270,6 +447,9 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
         if (ct !== undefined) setCurrentTeamIndex(ct);
         if (ts !== undefined) setTeamScores(ts);
         if (tl !== undefined) setTimeLeft(tl);
+        if (ac !== undefined) setActiveClue(ac);
+        if (hr !== undefined) setHasReboundAttempted(hr);
+        if (fb !== undefined) setFeedback(fb);
       }
     };
     bc.postMessage({ type: "REQUEST_STATE" });
@@ -326,6 +506,31 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     return () => clearTimeout(id);
   }, [timeLeft, isTimerRunning, active]);
 
+  // Start / stop timerSound
+  useEffect(() => {
+    if (isTimerRunning && active && timeLeft > 0) {
+      timerSound.play();
+    } else {
+      timerSound.stop();
+      timerSound.setPlaybackRate(1.0);
+    }
+    return () => {
+      timerSound.stop();
+      timerSound.setPlaybackRate(1.0);
+    };
+  }, [isTimerRunning, !!active]);
+
+  // Adjust playback rate for extra tension in the last 5 seconds
+  useEffect(() => {
+    if (isTimerRunning && active) {
+      if (timeLeft <= 5) {
+        timerSound.setPlaybackRate(1.6);
+      } else {
+        timerSound.setPlaybackRate(1.0);
+      }
+    }
+  }, [timeLeft, isTimerRunning, !!active]);
+
   useEffect(() => {
     const count = game.cluesPerTeam ?? 2;
     setClueUsage([{ remaining: count, usedTypes: [] }, { remaining: count, usedTypes: [] }]);
@@ -361,13 +566,20 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     if (isRemoteMode) updateSession({ activeQuestionId: null, activeCategoryId: null, isAnswerRevealed: false });
   };
 
-  const showFeedback = (type: "correct" | "wrong", options?: { closeAfter?: boolean; durationMs?: number }) => {
-    const { closeAfter = true, durationMs = 2500 } = options || {};
+  const showFeedback = (
+    type: "correct" | "wrong",
+    options?: { closeAfter?: boolean; durationMs?: number; onComplete?: () => void }
+  ) => {
+    const { closeAfter = true, durationMs = 2000, onComplete } = options || {};
     setFeedback(type);
     if (type === "correct") correctSound.play(); else wrongSound.play();
     setTimeout(() => {
       setFeedback(null);
-      if (closeAfter) clearQuestionState();
+      if (onComplete) {
+        onComplete();
+      } else if (closeAfter) {
+        clearQuestionState();
+      }
     }, durationMs);
   };
 
@@ -381,7 +593,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
   };
 
   const handleCorrect = () => {
-    if (!active) return;
+    if (!active || showAnswer) return;
     const pts = active.question.points || 0;
     const answeringTeam = currentTeamIndex;
     const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : answeringTeam;
@@ -394,8 +606,19 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
       setTeamScores(newScores);
       markUsed(active.question.id);
       setIsTimerRunning(false);
-      showFeedback("correct");
-      advanceTurnAfterResolution("correct", turnBasis);
+
+      const hasExplanation = !!active.question.explanation?.trim();
+      showFeedback("correct", {
+        closeAfter: !hasExplanation,
+        durationMs: 2000,
+        onComplete: hasExplanation
+          ? () => {
+              setCardView("answer");
+              setShowAnswer(true);
+              advanceTurnAfterResolution("correct", turnBasis);
+            }
+          : undefined,
+      });
       return;
     }
 
@@ -407,13 +630,35 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     }
     markUsed(active.question.id);
     setIsTimerRunning(false);
-    showFeedback("correct");
-    advanceTurnAfterResolution("correct", turnBasis);
+
+    const hasExplanation = !!active.question.explanation?.trim();
+    showFeedback("correct", {
+      closeAfter: !hasExplanation,
+      durationMs: 2000,
+      onComplete: hasExplanation
+        ? () => {
+            setCardView("answer");
+            setShowAnswer(true);
+            advanceTurnAfterResolution("correct", turnBasis);
+          }
+        : undefined,
+    });
   };
 
   const handleWrong = (_isTimeout = false) => {
-    if (!active) return;
+    if (!active || showAnswer) return;
     const reboundsAllowed = (game.allowRebounds ?? true) && activeClue?.type !== "ASK_OTHER_TEAM";
+    const pts = active.question.points || 0;
+    const failingTeam = currentTeamIndex;
+    const newScores = [...teamScores] as [number, number];
+
+    // Subtract points from the team that failed
+    newScores[failingTeam] -= pts;
+    setTeamScores(newScores);
+    if (isRemoteMode && sessionData?.teamScores) {
+      const teams = Object.keys(sessionData.teamScores).sort();
+      updateSession({ teamScores: { ...sessionData.teamScores, [teams[failingTeam]]: newScores[failingTeam] } });
+    }
 
     if (reboundsAllowed && !hasReboundAttempted) {
       setHasReboundAttempted(true);
@@ -429,10 +674,19 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
 
     markUsed(active.question.id);
     setIsTimerRunning(false);
-    showFeedback("wrong");
+
     const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : currentTeamIndex;
-    advanceTurnAfterResolution("wrong", turnBasis);
-    if (isRemoteMode) updateSession({ activeQuestionId: null, hasReboundAttempted: false, currentTeamIndex: (turnBasis === 0 ? 1 : 0) });
+    showFeedback("wrong", {
+      closeAfter: true,
+      durationMs: 3000,
+      onComplete: () => {
+        advanceTurnAfterResolution("wrong", turnBasis);
+        clearQuestionState();
+        if (isRemoteMode) {
+          updateSession({ activeQuestionId: null, hasReboundAttempted: false, currentTeamIndex: (turnBasis === 0 ? 1 : 0) });
+        }
+      },
+    });
   };
 
   const teamLabel = (index: 0 | 1) => game.teams?.[index] || `Team ${index + 1}`;
@@ -440,7 +694,6 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
 
   const getHostCue = () => {
     if (!active) return "Give them a hint without revealing the answer.";
-    if (active.question.explanation?.trim()) return active.question.explanation;
     const answer = active.question.correctAnswer?.trim();
     if (answer) return `Starts with "${answer[0]}" and has ${answer.length} letters.`;
     return "Give them a hint without revealing the answer.";
@@ -477,7 +730,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
   const openQuestion = (category: JeopardyCategory, question: JeopardyQuestion) => {
     setActive({ category, question });
     setShowAnswer(false);
-    setCardView("score");
+    setCardView("question");
     setHasReboundAttempted(false);
     setActiveClue(null);
     setShowClueMenu(false);
@@ -509,15 +762,53 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
   if (isViewer) {
     return (
       <div className="h-full flex flex-col bg-gradient-to-b from-blue-950 to-slate-900 text-white relative overflow-hidden">
-        <main className="flex-1 flex flex-col p-4 relative h-full">
+        {/* Dynamic TV Header Bar displaying team scores and active turn highlight */}
+        <header className="flex items-center justify-between px-6 py-4 bg-slate-900/80 backdrop-blur border-b border-blue-900/50 shrink-0">
+          <div>
+            <h1 className="text-4xl font-extrabold tracking-widest uppercase bg-gradient-to-r from-yellow-300 to-amber-500 bg-clip-text text-transparent">
+              {game.name || "Jeopardy"}
+            </h1>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Viktoria Game Show</p>
+          </div>
+          
+          <div className="flex items-center gap-6">
+            {([0, 1] as const).map(index => {
+              const isTurn = currentTeamIndex === index;
+              return (
+                <div
+                  key={index}
+                  className={`relative px-6 py-2 rounded-2xl border-2 transition-all duration-300 flex items-center gap-4 ${
+                    isTurn
+                      ? "bg-yellow-400/20 border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.4)] scale-105"
+                      : "bg-slate-800/40 border-slate-700 text-slate-300"
+                  }`}
+                >
+                  {isTurn && (
+                    <span className="absolute -top-2 -left-2 bg-yellow-400 text-black text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse shadow-md">
+                      Active Turn
+                    </span>
+                  )}
+                  <span className={`text-sm font-black uppercase tracking-wider ${isTurn ? "text-yellow-300" : "text-slate-400"}`}>
+                    {teamLabel(index)}
+                  </span>
+                  <span className={`text-4xl font-black tabular-nums ${isTurn ? "text-yellow-300" : "text-slate-100"}`}>
+                    {teamScores[index]}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </header>
+
+        <main className="flex-1 flex flex-col p-4 relative h-full min-h-0">
           {game.categories.length === 0 ? (
             <div className="h-full flex items-center justify-center text-slate-300">No categories configured.</div>
           ) : (
             <div
-              className="flex-1 grid gap-2 h-full"
+              className="flex-1 grid gap-2 h-full border-[8px] border-blue-900/80 rounded-2xl p-1 bg-blue-950/20 shadow-2xl overflow-hidden"
               style={{
                 gridTemplateColumns: `repeat(${game.categories.length}, minmax(0, 1fr))`,
-                gridTemplateRows: `auto repeat(${allPoints.length}, 1fr)`
+                gridTemplateRows: `auto repeat(${allPoints.length}, minmax(0, 1fr))`
               }}
             >
               {game.categories.map(cat => (
@@ -533,12 +824,12 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                   return (
                     <div
                       key={`${cat.id}-${points}`}
-                      className={`h-full flex items-center justify-center font-extrabold text-4xl border shadow-md ${
-                        isUsed ? "bg-blue-800 p-1" : "bg-blue-700 text-yellow-300 border-blue-400"
+                      className={`h-full flex items-center justify-center font-extrabold text-4xl border shadow-md overflow-hidden relative ${
+                        isUsed ? "bg-white p-1" : "bg-blue-700 text-yellow-300 border-blue-400"
                       }`}
                     >
                       {isUsed ? (
-                        <img src={CARD_BACK_IMG} alt="Used" className="h-full w-full object-contain opacity-40" />
+                        <img src={CARD_BACK_IMG} alt="Used" className="absolute inset-0 w-full h-full object-contain p-1" />
                       ) : points}
                     </div>
                   );
@@ -555,9 +846,11 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
             teamScores={teamScores}
             teamLabels={[teamLabel(0), teamLabel(1)]}
             timeLeft={timeLeft}
+            activeClue={activeClue}
+            hasReboundAttempted={hasReboundAttempted}
           />
+          <FeedbackOverlay type={feedback} correctAnswer={active?.question.correctAnswer} points={active?.question.points} />
         </main>
-        {feedback && <FeedbackOverlay type={feedback} />}
       </div>
     );
   }
@@ -602,10 +895,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
           <div className="h-full flex items-center justify-center text-slate-300">No categories configured for this game.</div>
         ) : (
           <div
-            className="flex-1 grid gap-2 h-full"
+            className="flex-1 grid gap-2 h-full border-[8px] border-blue-900/80 rounded-2xl p-1 bg-blue-950/20 shadow-2xl overflow-hidden"
             style={{
               gridTemplateColumns: `repeat(${game.categories.length}, minmax(180px, 1fr))`,
-              gridTemplateRows: `auto repeat(${allPoints.length}, 1fr)`
+              gridTemplateRows: `auto repeat(${allPoints.length}, minmax(0, 1fr))`
             }}
           >
             {game.categories.map(cat => (
@@ -623,7 +916,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                     key={`${cat.id}-${points}`}
                     disabled={isUsed}
                     onClick={() => openQuestion(cat, q)}
-                    className={`h-full flex items-center justify-center font-extrabold text-4xl rounded-b-lg border shadow-md transition-all ${
+                    className={`h-full flex items-center justify-center font-extrabold text-4xl rounded-b-lg border shadow-md transition-all overflow-hidden relative ${
                       isUsed
                         ? "bg-white p-1 cursor-not-allowed"
                         : "bg-blue-700 hover:bg-blue-500 text-yellow-300 border-blue-400 hover:scale-[1.02]"
@@ -631,7 +924,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                     title={isUsed ? "Question answered" : `${cat.name} · ${points}`}
                   >
                     {isUsed ? (
-                      <img src={CARD_BACK_IMG} alt="Question answered" className="h-full w-full object-contain" />
+                      <img src={CARD_BACK_IMG} alt="Question answered" className="absolute inset-0 w-full h-full object-contain p-1" />
                     ) : (
                       points  // ← no $ sign
                     )}
@@ -646,7 +939,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
       {/* Active question modal */}
       {active && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-8">
-          <div className="bg-slate-900 border border-yellow-400 rounded-2xl p-8 w-full h-full flex flex-col gap-6 shadow-2xl overflow-hidden">
+          <div className="bg-slate-900 border border-yellow-400 rounded-2xl p-8 w-full h-full flex flex-col gap-6 shadow-2xl overflow-hidden relative">
 
             {/* Header: category + timer + Start Timer button + Close */}
             <header className="flex items-center justify-between shrink-0">
@@ -655,6 +948,16 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                 <p className="text-xl text-slate-300">{active.question.points} pts</p>
               </div>
               <div className="flex items-center gap-4">
+                {activeClue && (
+                  <div className="flex items-center gap-2 bg-blue-500/20 border border-blue-400/30 px-4 py-2 rounded-xl text-blue-300 text-sm font-black uppercase tracking-wider animate-pulse mr-2">
+                    <span className="text-base">💡</span>
+                    <span>
+                      {activeClue.type === "CALL_FRIEND" && `Call Friend (${teamLabel(activeClue.usedBy)})`}
+                      {activeClue.type === "ASK_HOST" && `Ask Host (${teamLabel(activeClue.usedBy)})`}
+                      {activeClue.type === "ASK_OTHER_TEAM" && `Ask Team (${teamLabel(activeClue.usedBy)})`}
+                    </span>
+                  </div>
+                )}
                 <TimerCircle timeLeft={timeLeft} duration={TIMER_DURATION} />
                 {/* ★ NEW: Manual timer start/pause */}
                 <button
@@ -663,7 +966,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                     isTimerRunning
                       ? "bg-orange-600 hover:bg-orange-500 border border-orange-400 text-white"
                       : !activeClue && canFlashTimerButton
-                        ? "bg-green-600 hover:bg-green-500 ring-4 ring-green-400 animate-pulse text-white"
+                        ? "bg-red-600 hover:bg-red-500 border-2 border-red-400 text-white animate-grow-shrink shadow-2xl"
                         : "bg-red-600 hover:bg-red-500 border-2 border-red-400 text-white scale-105 shadow-2xl"
                   }`}
                 >
@@ -683,7 +986,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
               ) : active.question.questionMediaUrl && active.question.questionMediaType ? (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full h-full min-h-0">
                   {/* Left Column: Media (7 cols) */}
-                  <div className="lg:col-span-7 bg-slate-800 rounded-xl p-4 flex justify-center items-center h-full min-h-[300px] overflow-hidden">
+                  <div className="lg:col-span-7 bg-slate-800 rounded-xl p-4 flex justify-center items-center h-full max-h-[60vh] overflow-hidden">
                     {active.question.questionMediaType === "IMAGE" && (
                       <img src={resolveMediaUrl(active.question.questionMediaUrl)} alt="Question media" className="max-w-full max-h-full rounded shadow-lg object-contain" />
                     )}
@@ -696,7 +999,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                   </div>
 
                   {/* Right Column: Question + Correct Answer + Clues (5 cols) */}
-                  <div className="lg:col-span-5 flex flex-col gap-4 overflow-y-auto h-full pr-1">
+                  <div className="lg:col-span-5 flex flex-col gap-4 justify-center items-center h-full max-h-[60vh] overflow-hidden w-full">
                     <div className="bg-slate-800 rounded-xl p-6 flex-1 flex items-center justify-center text-center min-h-[150px]">
                       <p className="text-3xl leading-relaxed font-semibold">{active.question.question || "No clue provided."}</p>
                     </div>
@@ -729,17 +1032,12 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                       </div>
                     )}
 
-                    {showAnswer && (
-                      <div className="bg-emerald-900/60 rounded-xl p-4 border border-emerald-500 text-center shrink-0">
-                        <p className="text-xs text-emerald-300 font-semibold mb-1">Correct Response:</p>
-                        <p className="text-xl font-bold">{active.question.correctAnswer || "No answer configured."}</p>
-                      </div>
-                    )}
+                    {/* Duplicate correct answer display removed since the Correct Answer bar is already shown above */}
                   </div>
                 </div>
               ) : (
                 /* No media layout: vertical flex stack */
-                <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center space-y-6 w-full max-w-4xl mx-auto">
+                <div className="flex-1 overflow-hidden flex flex-col items-center justify-center space-y-6 w-full max-w-4xl mx-auto h-full max-h-[60vh]">
                   <div className="bg-slate-800 rounded-xl p-10 w-full text-center">
                     <p className="text-4xl leading-relaxed font-semibold">{active.question.question || "No clue provided."}</p>
                   </div>
@@ -772,12 +1070,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                     </div>
                   )}
 
-                  {showAnswer && (
-                    <div className="bg-emerald-900/60 rounded-xl p-6 border border-emerald-500 w-full text-center">
-                      <p className="text-lg text-emerald-300 font-semibold mb-2">Correct Response:</p>
-                      <p className="text-3xl font-bold">{active.question.correctAnswer || "No answer configured."}</p>
-                    </div>
-                  )}
+                  {/* Duplicate correct answer display removed since the Correct Answer bar is already shown above */}
                 </div>
               )}
             </div>
@@ -798,20 +1091,29 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                     </button>
                   </div>
                 </div>
-                {!showAnswer && (
+                {showAnswer ? (
                   <button
-                    onClick={() => { setShowAnswer(true); setCardView("answer"); }}
-                    className="px-6 py-3 rounded-lg bg-yellow-400 text-black font-semibold hover:bg-yellow-300 text-lg"
+                    onClick={clearQuestionState}
+                    className="px-8 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 text-xl shadow-lg ring-4 ring-blue-400 animate-pulse"
                   >
-                    Show Answer
+                    Next (Return to Grid)
                   </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => { setShowAnswer(true); setCardView("answer"); }}
+                      className="px-6 py-3 rounded-lg bg-yellow-400 text-black font-semibold hover:bg-yellow-300 text-lg"
+                    >
+                      Show Answer
+                    </button>
+                    <button onClick={() => handleWrong()} className="px-6 py-3 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-500 text-lg">
+                      Wrong (W)
+                    </button>
+                    <button onClick={handleCorrect} className="px-6 py-3 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 text-lg">
+                      Correct (R)
+                    </button>
+                  </>
                 )}
-                <button onClick={() => handleWrong()} className="px-6 py-3 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-500 text-lg">
-                  Wrong (W)
-                </button>
-                <button onClick={handleCorrect} className="px-6 py-3 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 text-lg">
-                  Correct (R)
-                </button>
               </div>
 
               {showClueMenu && (
@@ -846,7 +1148,6 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
         </div>
       )}
 
-      {feedback && <FeedbackOverlay type={feedback} />}
     </div>
   );
 };

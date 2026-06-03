@@ -94,3 +94,15 @@ body.tv-viewer-mode * {
   user-select: none !important;
   cursor: none !important;
 }
+
+@keyframes grow-shrink {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+.animate-grow-shrink {
+  animation: grow-shrink 1s infinite ease-in-out;
+}
