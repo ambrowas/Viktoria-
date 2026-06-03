@@ -372,6 +372,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
   const [currentTeamIndex, setCurrentTeamIndex] = useState<0 | 1>(0);
   const [teamScores, setTeamScores] = useState<[number, number]>([0, 0]);
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
+  const [revealAnswerInFeedback, setRevealAnswerInFeedback] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [hasReboundAttempted, setHasReboundAttempted] = useState(false);
@@ -395,9 +396,9 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
   ]);
 
   // Keep latest state in ref so BC handler never has stale closure
-  const latestRef = useRef({ active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback });
+  const latestRef = useRef({ active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback, revealAnswerInFeedback });
   useEffect(() => {
-    latestRef.current = { active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback };
+    latestRef.current = { active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback, revealAnswerInFeedback };
   });
 
   // ── PC: BroadcastChannel → TV ─────────────────────────────────────────────
@@ -417,6 +418,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
           teamScores: s.teamScores, timeLeft: s.timeLeft, isTimerRunning: s.isTimerRunning,
           activeClue: s.activeClue, hasReboundAttempted: s.hasReboundAttempted,
           feedback: s.feedback,
+          revealAnswerInFeedback: s.revealAnswerInFeedback,
         });
       }
     };
@@ -433,15 +435,16 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
       teamScores, timeLeft, isTimerRunning,
       activeClue, hasReboundAttempted,
       feedback,
+      revealAnswerInFeedback,
     });
-  }, [isViewer, active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback]);
+  }, [isViewer, active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback, revealAnswerInFeedback]);
 
   // ── TV: receive from PC ───────────────────────────────────────────────────
   useEffect(() => {
     if (!isViewer) return;
     const bc = new BroadcastChannel(JEOPARDY_BC);
     bc.onmessage = (ev) => {
-      const { type: t, active: a, showAnswer: sa, cardView: cv, usedIds: ui, currentTeamIndex: ct, teamScores: ts, timeLeft: tl, activeClue: ac, hasReboundAttempted: hr, feedback: fb } = ev.data;
+      const { type: t, active: a, showAnswer: sa, cardView: cv, usedIds: ui, currentTeamIndex: ct, teamScores: ts, timeLeft: tl, activeClue: ac, hasReboundAttempted: hr, feedback: fb, revealAnswerInFeedback: raf } = ev.data;
       if (t === "STATE_UPDATE") {
         if (a !== undefined) setActive(a);
         if (sa !== undefined) setShowAnswer(sa);
@@ -453,6 +456,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
         if (ac !== undefined) setActiveClue(ac);
         if (hr !== undefined) setHasReboundAttempted(hr);
         if (fb !== undefined) setFeedback(fb);
+        if (raf !== undefined) setRevealAnswerInFeedback(raf);
       }
     };
     bc.postMessage({ type: "REQUEST_STATE" });
@@ -468,6 +472,8 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
       setTeamScores([sessionData.teamScores[teams[0]] || 0, sessionData.teamScores[teams[1]] || 0]);
     }
     if (sessionData.isAnswerRevealed !== undefined) setShowAnswer(sessionData.isAnswerRevealed);
+    if (sessionData.feedback !== undefined) setFeedback(sessionData.feedback);
+    if (sessionData.revealAnswerInFeedback !== undefined) setRevealAnswerInFeedback(sessionData.revealAnswerInFeedback);
   }, [sessionData, isRemoteMode]);
 
   useEffect(() => {
@@ -579,15 +585,17 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
 
   const showFeedback = (
     type: "correct" | "wrong",
-    options?: { closeAfter?: boolean; durationMs?: number; onComplete?: () => void }
+    options?: { closeAfter?: boolean; durationMs?: number; onComplete?: () => void; revealAnswer?: boolean }
   ) => {
-    const { closeAfter = true, onComplete } = options || {};
+    const { closeAfter = true, onComplete, revealAnswer = false } = options || {};
     setFeedback(type);
+    setRevealAnswerInFeedback(revealAnswer);
     if (type === "correct") correctSound.play(); else wrongSound.play();
 
     // Save completion callback to run when Host clicks "Continue"
     feedbackCallbackRef.current = () => {
       setFeedback(null);
+      setRevealAnswerInFeedback(false);
       if (onComplete) {
         onComplete();
       } else if (closeAfter) {
@@ -700,6 +708,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : currentTeamIndex;
     showFeedback("wrong", {
       closeAfter: true,
+      revealAnswer: true, // REVEAL answer on final wrong
       onComplete: () => {
         advanceTurnAfterResolution("wrong", turnBasis);
         clearQuestionState();
@@ -877,7 +886,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
             activeClue={activeClue}
             hasReboundAttempted={hasReboundAttempted}
           />
-          <FeedbackOverlay type={feedback} correctAnswer={active?.question.correctAnswer} points={active?.question.points} />
+          <FeedbackOverlay type={feedback} correctAnswer={revealAnswerInFeedback ? active?.question.correctAnswer : undefined} points={active?.question.points} />
         </main>
       </div>
     );
