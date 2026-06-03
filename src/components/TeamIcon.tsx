@@ -34,7 +34,7 @@ const TeamIcon: React.FC<TeamIconProps> = ({ iconName, className = "w-6 h-6", st
                 style={{ 
                     ...style, 
                     objectFit: 'contain',
-                    transform: style?.transform ? `${style.transform} scale(1.3)` : 'scale(1.3)'
+                    transform: style?.transform ? `${style.transform} scale(3.9)` : 'scale(3.9)'
                 }} 
                 alt={`${iconName} Team Icon`} 
             />

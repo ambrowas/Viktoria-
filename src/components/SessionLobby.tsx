@@ -154,13 +154,18 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({
                                                         // 🎉 Play immediately on click — don't wait for state update
                                                         checkInSound.play();
 
-                                                        registerParticipant(sessionId || 'local', {
-                                                            id: `manual-${team.id}-${Date.now()}`,
-                                                            name: members.length === 0 ? `${team.name} Player` : `Player ${members.length + 1}`,
-                                                            teamId: team.id,
-                                                            role: 'player',
-                                                            isBuzzed: false
-                                                        }).then(() => {
+                                                         const nextIndex = members.length;
+                                                         const playerName = team.players && team.players[nextIndex] && team.players[nextIndex].name
+                                                             ? team.players[nextIndex].name.trim()
+                                                             : `${team.name} Player ${nextIndex + 1}`;
+
+                                                         registerParticipant(sessionId || 'local', {
+                                                             id: `manual-${team.id}-${Date.now()}`,
+                                                             name: playerName,
+                                                             teamId: team.id,
+                                                             role: 'player',
+                                                             isBuzzed: false
+                                                         }).then(() => {
                                                             if (btn) {
                                                                 btn.disabled = false;
                                                                 btn.innerText = members.length > 0 ? "ADD PLAYER" : "Check In";
@@ -234,13 +239,18 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({
                                                     whileTap={{ scale: 0.95 }}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        registerParticipant(sessionId || 'local', {
-                                                            id: `manual-${team.id}-${Date.now()}`,
-                                                            name: `Player ${members.length + 1}`,
-                                                            teamId: team.id,
-                                                            role: 'player',
-                                                            isBuzzed: false
-                                                        });
+                                                         const nextIndex = members.length;
+                                                         const playerName = team.players && team.players[nextIndex] && team.players[nextIndex].name
+                                                             ? team.players[nextIndex].name.trim()
+                                                             : `Player ${nextIndex + 1}`;
+
+                                                         registerParticipant(sessionId || 'local', {
+                                                             id: `manual-${team.id}-${Date.now()}`,
+                                                             name: playerName,
+                                                             teamId: team.id,
+                                                             role: 'player',
+                                                             isBuzzed: false
+                                                         });
                                                     }}
                                                     className="mt-6 text-yellow-500 hover:text-yellow-400 font-black text-sm uppercase tracking-widest flex items-center gap-2 mx-auto"
                                                 >
@@ -264,13 +274,18 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({
                                         whileTap={{ scale: 0.98 }}
                                         onClick={() => {
                                             if (true) {
-                                                registerParticipant(sessionId || 'local', {
-                                                    id: `manual-${team.id}-${Date.now()}`,
-                                                    name: `${team.name} Player`,
-                                                    teamId: team.id,
-                                                    role: 'player',
-                                                    isBuzzed: false
-                                                });
+                                                 const nextIndex = members.length;
+                                                 const playerName = team.players && team.players[nextIndex] && team.players[nextIndex].name
+                                                     ? team.players[nextIndex].name.trim()
+                                                     : `${team.name} Player`;
+
+                                                 registerParticipant(sessionId || 'local', {
+                                                     id: `manual-${team.id}-${Date.now()}`,
+                                                     name: playerName,
+                                                     teamId: team.id,
+                                                     role: 'player',
+                                                     isBuzzed: false
+                                                 });
                                             }
                                         }}
                                         className="h-full flex-1 flex flex-col items-center justify-center opacity-40 border-2 border-dashed border-white/20 rounded-[3rem] p-10 hover:opacity-100 hover:border-yellow-500/50 transition-all duration-500 group"
