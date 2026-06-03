@@ -519,7 +519,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
           <label className="block font-semibold mb-1">Language</label>
           <select
             value={showDraft.settings.language || "es"}
-            onChange={(e) => updateSettings({ language: e.target.value as any })}
+            onChange={(e) => updateSettings({ language: e.target.value as ShowSettings["language"] })}
             className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
           >
             <option value="es">Español 🇬🇶</option>
@@ -533,7 +533,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
           <label className="block font-semibold mb-1">Host Mode</label>
           <select
             value={showDraft.settings.hostControl || "ipad"}
-            onChange={(e) => updateSettings({ hostControl: e.target.value as any })}
+            onChange={(e) => updateSettings({ hostControl: e.target.value as ShowSettings["hostControl"] })}
             className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
           >
             <option value="ipad">iPad Mode</option>
@@ -544,7 +544,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
           <label className="block font-semibold mb-1">Player Mode</label>
           <select
             value={showDraft.settings.playerControl || "ipad"}
-            onChange={(e) => updateSettings({ playerControl: e.target.value as any })}
+            onChange={(e) => updateSettings({ playerControl: e.target.value as ShowSettings["playerControl"] })}
             className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
           >
             <option value="ipad">iPad Mode (Remote)</option>
@@ -558,7 +558,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
           <label className="block font-semibold mb-1">⏱️ Timer Countdown Trigger</label>
           <select
             value={showDraft.settings.timerStartMode || "auto"}
-            onChange={(e) => updateSettings({ timerStartMode: e.target.value as any })}
+            onChange={(e) => updateSettings({ timerStartMode: e.target.value as ShowSettings["timerStartMode"] })}
             className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
           >
             <option value="auto">Automatic Countdown Start (Inicio Automático)</option>
@@ -572,7 +572,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
           <label className="block font-semibold mb-1">🔄 Pacing & Advance Mode</label>
           <select
             value={showDraft.settings.advanceMode || "host"}
-            onChange={(e) => updateSettings({ advanceMode: e.target.value as any })}
+            onChange={(e) => updateSettings({ advanceMode: e.target.value as ShowSettings["advanceMode"] })}
             className="w-full rounded-lg p-3 bg-base-200 border border-base-300"
           >
             <option value="host">Host-Led Advance (Avance Manual por Presentador)</option>
