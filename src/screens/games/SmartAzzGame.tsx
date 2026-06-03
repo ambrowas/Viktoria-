@@ -58,6 +58,7 @@ interface SmartAzzGameProps {
   allTeams?: any[];
   organizers?: Array<{ role: string; name: string }>;
   isPreview?: boolean;
+  isViewer?: boolean;
 }
 
 const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({ 
@@ -70,12 +71,13 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
   themeMusicPath,
   allTeams,
   organizers,
-  isPreview = false
+  isPreview = false,
+  isViewer: isViewerProp = false
 }) => {
   const { sessionData, updateSession, isRemoteMode, deviceRole } = useSync();
   const { lang: globalLang } = useLanguage();
   const isHost = isPreview ? true : (deviceRole === 'host');
-  const isViewer = isPreview ? false : (deviceRole === 'viewer');
+  const isViewer = isPreview ? false : isViewerProp;
   const isSyncActive = isPreview ? false : (isRemoteMode && sessionData);
   const lang = globalLang || 'en';
 

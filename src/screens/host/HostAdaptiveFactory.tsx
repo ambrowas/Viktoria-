@@ -13,6 +13,7 @@ import DefinitionsController from './controllers/DefinitionsController';
 import PriceIsRightController from './controllers/PriceIsRightController';
 import LotteryController from './controllers/LotteryController';
 import BingoController from './controllers/BingoController';
+import SmartAzzController from './controllers/SmartAzzController';
 import GenericController from './controllers/GenericController';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Clapperboard } from 'lucide-react';
@@ -63,6 +64,8 @@ const HostAdaptiveFactory: React.FC<HostAdaptiveFactoryProps> = ({ currentGame }
                 return <LotteryController {...props} />;
             case GameType.BINGO:
                 return <BingoController {...props} />;
+            case GameType.SMART_AZZ:
+                return <SmartAzzController {...props} />;
             default:
                 return <GenericController {...props} />;
         }

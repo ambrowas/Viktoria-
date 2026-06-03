@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSync } from '@/context/SyncContext';
-import { Game } from '@/types';
+import { Game, GameType } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     AlertCircle, BookOpen, Layers, Award, Crown, X
@@ -18,7 +18,7 @@ const DEFAULT_SHOW_TEAMS = [
 import { fallbackGames } from '@/data/fallbackGames';
 
 interface AfricaDayLandingPageProps {
-    activeTab?: 'dashboard' | 'briefing' | 'round-1' | 'round-2' | 'round-3' | 'credits';
+    activeTab?: 'dashboard' | 'briefing' | 'round-1' | 'round-2' | 'round-3' | 'credits' | 'observations' | 'home';
     setActiveTab?: (tab: any) => void;
     isUnlocked?: boolean;
     setIsUnlocked?: (val: boolean) => void;
@@ -218,7 +218,7 @@ const AfricaDayLandingPage: React.FC<AfricaDayLandingPageProps> = ({
 
     const round1Game = useMemo(() => {
         const allGames = [...localGames, ...fallbackGames];
-        const jeopardyGames = allGames.filter(g => g.type === 'JEOPARDY');
+        const jeopardyGames = allGames.filter(g => g.type === GameType.QUIZBOARD);
         const round1Match = jeopardyGames.find(g => 
             g.name?.toLowerCase().includes('round 1') || 
             g.name?.toLowerCase().includes('ronda 1') ||
@@ -231,7 +231,7 @@ const AfricaDayLandingPage: React.FC<AfricaDayLandingPageProps> = ({
 
     const round2Game = useMemo(() => {
         const allGames = [...localGames, ...fallbackGames];
-        const jeopardyGames = allGames.filter(g => g.type === 'JEOPARDY');
+        const jeopardyGames = allGames.filter(g => g.type === GameType.QUIZBOARD);
         const round2Match = jeopardyGames.find(g => 
             g.name?.toLowerCase().includes('round 2') || 
             g.name?.toLowerCase().includes('ronda 2') ||
