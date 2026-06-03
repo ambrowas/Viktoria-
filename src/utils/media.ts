@@ -1,4 +1,4 @@
-export const resolveMediaUrl = (url: string) => {
+export const resolveMediaUrl = (url?: string) => {
   if (!url) {
     return "";
   }

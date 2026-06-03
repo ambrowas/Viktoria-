@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import { JeopardyGame, JeopardyCategory, JeopardyQuestion, JeopardyTurnMode } from "@/types";
+import { JeopardyGame, JeopardyCategory, JeopardyQuestion, JeopardyTurnMode, Team } from "@/types";
 import { useSync } from "@/context/SyncContext";
 import { correctSound, wrongSound, timerSound } from "@/utils/sound";
 import { resolveMediaUrl } from "@/utils/media";
@@ -19,15 +19,18 @@ interface TeamClueUsage {
 
 interface ActiveClueState {
   type: ClueType;
-  usedBy: 0 | 1;
-  targetTeam?: 0 | 1;
+  usedBy: number;
+  targetTeam?: number;
   note?: string;
 }
 
 interface JeopardyGameProps {
   game: JeopardyGame;
-  onExit: () => void;
+  onExit: (points?: Record<string, number>) => void;
   isViewer?: boolean;
+  teams?: Team[];
+  teamScores?: Record<string, number>;
+  onScoreChange?: (teamId: string, score: number) => void;
 }
 
 // ── Timer circle (unchanged from original) ────────────────────────────────────
@@ -59,7 +62,10 @@ const TimerCircle: React.FC<{ timeLeft: number; duration: number }> = ({ timeLef
 
 
 
-const otherTeam = (team: 0 | 1) => (team === 0 ? 1 : 0) as 0 | 1;
+const otherTeam = (team: number, total: number = 2) => {
+  if (total <= 2) return team === 0 ? 1 : 0;
+  return (team + 1) % total;
+};
 
 const hasVisualMedia = (url?: string, type?: string) => {
   return !!url && (type === "IMAGE" || type === "VIDEO");
@@ -69,9 +75,9 @@ const hasVisualMedia = (url?: string, type?: string) => {
 const TVScoreOverlay: React.FC<{
   active: { category: JeopardyCategory; question: JeopardyQuestion } | null;
   cardView: CardView;
-  currentTeamIndex: 0 | 1;
-  teamScores: [number, number];
-  teamLabels: [string, string];
+  currentTeamIndex: number;
+  teamScores: number[];
+  teamLabels: string[];
   timeLeft: number;
   activeClue: ActiveClueState | null;
   hasReboundAttempted: boolean;
@@ -119,7 +125,7 @@ const TVScoreOverlay: React.FC<{
         {/* Team Scores Bar */}
         {cardView !== "question" && (
           <div className="flex gap-6 shrink-0 mb-4">
-            {([0, 1] as const).map(i => (
+            {teamLabels.map((_, i) => (
               <div
                 key={i}
                 className={`transition-all flex items-center gap-4 ${
@@ -142,7 +148,7 @@ const TVScoreOverlay: React.FC<{
         {/* Score cards */}
         {cardView === "score" && (
           <div className="flex gap-6">
-            {([0, 1] as const).map(i => (
+            {teamLabels.map((_, i) => (
               <div
                 key={i}
                 className={`text-center px-12 py-7 rounded-2xl border-4 shadow-2xl transition-all ${
@@ -191,7 +197,7 @@ const TVScoreOverlay: React.FC<{
                       <p className="text-blue-100 font-bold text-lg">
                         {activeClue.type === "CALL_FRIEND" && `${teamLabels[activeClue.usedBy]} is calling a friend.`}
                         {activeClue.type === "ASK_HOST" && `${teamLabels[activeClue.usedBy]} asked the host.`}
-                        {activeClue.type === "ASK_OTHER_TEAM" && `${teamLabels[activeClue.usedBy]} asked ${teamLabels[activeClue.targetTeam ?? otherTeam(activeClue.usedBy)]} to answer.`}
+                        {activeClue.type === "ASK_OTHER_TEAM" && `${teamLabels[activeClue.usedBy]} asked ${teamLabels[activeClue.targetTeam ?? otherTeam(activeClue.usedBy, teamLabels.length)]} to answer.`}
                       </p>
                     </div>
                   )}
@@ -221,7 +227,7 @@ const TVScoreOverlay: React.FC<{
                     <p className="text-blue-100 font-bold text-xl">
                       {activeClue.type === "CALL_FRIEND" && `${teamLabels[activeClue.usedBy]} is calling a friend.`}
                       {activeClue.type === "ASK_HOST" && `${teamLabels[activeClue.usedBy]} asked the host.`}
-                      {activeClue.type === "ASK_OTHER_TEAM" && `${teamLabels[activeClue.usedBy]} asked ${teamLabels[activeClue.targetTeam ?? otherTeam(activeClue.usedBy)]} to answer.`}
+                      {activeClue.type === "ASK_OTHER_TEAM" && `${teamLabels[activeClue.usedBy]} asked ${teamLabels[activeClue.targetTeam ?? otherTeam(activeClue.usedBy, teamLabels.length)]} to answer.`}
                     </p>
                   </div>
                 )}
@@ -307,23 +313,23 @@ const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" | null; correctAnswe
         @keyframes floatUpDown {
           0% {
             opacity: 0;
-            transform: translateY(20px) scale(0.8);
+            transform: translateY(60px) scale(0.8);
           }
           15% {
-            opacity: 0.7;
+            opacity: 1;
             transform: translateY(0) scale(1.1);
           }
           30% {
-            opacity: 0.7;
+            opacity: 1;
             transform: translateY(0) scale(1);
           }
           70% {
-            opacity: 0.7;
-            transform: translateY(-10px) scale(1);
+            opacity: 1;
+            transform: translateY(-20px) scale(1);
           }
           100% {
             opacity: 0;
-            transform: translateY(-40px) scale(0.9);
+            transform: translateY(-80px) scale(0.9);
           }
         }
         .animate-float-up-down {
@@ -331,21 +337,12 @@ const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" | null; correctAnswe
         }
       `}</style>
       <div
-        className={`px-16 py-10 rounded-3xl border-4 shadow-2xl flex flex-col items-center gap-4 text-center transform scale-105 transition-all max-w-[90vw] relative ${
+        className={`px-16 py-10 rounded-3xl border-4 shadow-2xl flex flex-col items-center gap-4 text-center transform scale-105 transition-all max-w-[90vw] relative z-10 ${
           isCorrect
             ? "bg-emerald-950/95 border-emerald-400 text-emerald-300 shadow-emerald-900/50 animate-fade-in"
             : "bg-red-950/95 border-red-500 text-red-400 shadow-red-900/50 animate-fade-in"
         }`}
       >
-        {points !== undefined && (
-          <div
-            className={`absolute -top-16 text-7xl md:text-8xl font-black tracking-widest select-none pointer-events-none opacity-0 animate-float-up-down ${
-              isCorrect ? "text-emerald-400/50" : "text-red-400/50"
-            }`}
-          >
-            {isCorrect ? `+${points}` : `-${points}`} PTS
-          </div>
-        )}
         <span className="text-8xl">{isCorrect ? "🏆" : "❌"}</span>
         <h2 className="text-5xl font-black uppercase tracking-wide mt-2 max-w-4xl leading-snug">
           {isCorrect ? "Correct!" : "YOU HAVE THE WRONG ANSWER"}
@@ -356,21 +353,59 @@ const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" | null; correctAnswe
           </p>
         )}
       </div>
+      {points !== undefined && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
+          <div
+            className={`text-7xl md:text-8xl font-black tracking-widest select-none opacity-0 animate-float-up-down ${
+              isCorrect ? "text-emerald-400 drop-shadow-[0_4px_12px_rgba(16,185,129,0.5)]" : "text-red-500 drop-shadow-[0_4px_12px_rgba(239,68,68,0.5)]"
+            }`}
+            style={{ textShadow: '2px 2px 0px #000, -2px -2px 0px #000, 2px -2px 0px #000, -2px 2px 0px #000' }}
+          >
+            {isCorrect ? `+${points}` : `-${points}`} PTS
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
-const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewer = false }) => {
+const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewer = false, teams, teamScores: initialTeamScores, onScoreChange }) => {
   const { sessionData, updateSession, isRemoteMode } = useSync();
   const { lang } = useLanguage();
+
+  const showTeams = useMemo(() => {
+    if (teams && teams.length > 0) return teams;
+    if (game.teams) return game.teams.map((t, idx) => ({ id: `team_${idx}`, name: t, score: 0, players: [] }));
+    return [
+      { id: 'team_0', name: 'Team 1', score: 0, players: [] },
+      { id: 'team_1', name: 'Team 2', score: 0, players: [] }
+    ];
+  }, [teams, game.teams]);
+
+  const teamLabels = useMemo(() => showTeams.map(t => t.name), [showTeams]);
+  const teamLabel = (index: number) => showTeams[index]?.name || `Team ${index + 1}`;
+
+  const getNextReboundTeam = (currentIndex: number, attempted: number[]): number => {
+    let next = (currentIndex + 1) % showTeams.length;
+    for (let i = 0; i < showTeams.length; i++) {
+      if (!attempted.includes(next)) {
+        return next;
+      }
+      next = (next + 1) % showTeams.length;
+    }
+    return currentIndex;
+  };
 
   const [active, setActive] = useState<{ category: JeopardyCategory; question: JeopardyQuestion } | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [cardView, setCardView] = useState<CardView>("score");
   const [usedIds, setUsedIds] = useState<Set<string>>(new Set());
-  const [currentTeamIndex, setCurrentTeamIndex] = useState<0 | 1>(0);
-  const [teamScores, setTeamScores] = useState<[number, number]>([0, 0]);
+  const [currentTeamIndex, setCurrentTeamIndex] = useState<number>(0);
+  const [teamScores, setTeamScores] = useState<number[]>(() => {
+    return showTeams.map(t => (initialTeamScores && initialTeamScores[t.id]) || 0);
+  });
+  const [attemptedTeamIndices, setAttemptedTeamIndices] = useState<number[]>([]);
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
   const [revealAnswerInFeedback, setRevealAnswerInFeedback] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
@@ -380,6 +415,19 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
   const [showClueMenu, setShowClueMenu] = useState(false);
   const [canFlashTimerButton, setCanFlashTimerButton] = useState(false);
   const feedbackCallbackRef = useRef<() => void>(() => {});
+  const prevRemoteActiveIdRef = useRef<string | null>(null);
+
+  const handleExitClick = () => {
+    const msg = lang === "es" ? "¿Estás seguro de que deseas salir del juego?" : "Are you sure you want to exit the game?";
+    if (window.confirm(msg)) {
+      const earnedPoints: Record<string, number> = {};
+      showTeams.forEach((t, idx) => {
+        const initial = (initialTeamScores && initialTeamScores[t.id]) || 0;
+        earnedPoints[t.id] = teamScores[idx] - initial;
+      });
+      onExit(earnedPoints);
+    }
+  };
 
   useEffect(() => {
     setCanFlashTimerButton(false);
@@ -389,16 +437,16 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     }, 3000);
     return () => clearTimeout(timer);
   }, [active?.question?.id]);
+
   const initialClueCount = game.cluesPerTeam ?? 2;
-  const [clueUsage, setClueUsage] = useState<[TeamClueUsage, TeamClueUsage]>(() => [
-    { remaining: initialClueCount, usedTypes: [] },
-    { remaining: initialClueCount, usedTypes: [] },
-  ]);
+  const [clueUsage, setClueUsage] = useState<TeamClueUsage[]>(() =>
+    Array(showTeams.length).fill(null).map(() => ({ remaining: initialClueCount, usedTypes: [] }))
+  );
 
   // Keep latest state in ref so BC handler never has stale closure
-  const latestRef = useRef({ active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback, revealAnswerInFeedback });
+  const latestRef = useRef({ active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback, revealAnswerInFeedback, attemptedTeamIndices });
   useEffect(() => {
-    latestRef.current = { active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback, revealAnswerInFeedback };
+    latestRef.current = { active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback, revealAnswerInFeedback, attemptedTeamIndices };
   });
 
   // ── PC: BroadcastChannel → TV ─────────────────────────────────────────────
@@ -419,6 +467,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
           activeClue: s.activeClue, hasReboundAttempted: s.hasReboundAttempted,
           feedback: s.feedback,
           revealAnswerInFeedback: s.revealAnswerInFeedback,
+          attemptedTeamIndices: s.attemptedTeamIndices
         });
       }
     };
@@ -436,15 +485,16 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
       activeClue, hasReboundAttempted,
       feedback,
       revealAnswerInFeedback,
+      attemptedTeamIndices
     });
-  }, [isViewer, active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback, revealAnswerInFeedback]);
+  }, [isViewer, active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback, revealAnswerInFeedback, attemptedTeamIndices]);
 
   // ── TV: receive from PC ───────────────────────────────────────────────────
   useEffect(() => {
     if (!isViewer) return;
     const bc = new BroadcastChannel(JEOPARDY_BC);
     bc.onmessage = (ev) => {
-      const { type: t, active: a, showAnswer: sa, cardView: cv, usedIds: ui, currentTeamIndex: ct, teamScores: ts, timeLeft: tl, activeClue: ac, hasReboundAttempted: hr, feedback: fb, revealAnswerInFeedback: raf } = ev.data;
+      const { type: t, active: a, showAnswer: sa, cardView: cv, usedIds: ui, currentTeamIndex: ct, teamScores: ts, timeLeft: tl, activeClue: ac, hasReboundAttempted: hr, feedback: fb, revealAnswerInFeedback: raf, attemptedTeamIndices: ati } = ev.data;
       if (t === "STATE_UPDATE") {
         if (a !== undefined) setActive(a);
         if (sa !== undefined) setShowAnswer(sa);
@@ -457,59 +507,89 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
         if (hr !== undefined) setHasReboundAttempted(hr);
         if (fb !== undefined) setFeedback(fb);
         if (raf !== undefined) setRevealAnswerInFeedback(raf);
+        if (ati !== undefined) setAttemptedTeamIndices(ati);
       }
     };
     bc.postMessage({ type: "REQUEST_STATE" });
     return () => bc.close();
   }, [isViewer]);
 
-  // ── Firebase remote sync (unchanged from original) ────────────────────────
+  // ── Firebase remote sync ──────────────────────────────────────────────────
   useEffect(() => {
     if (!isRemoteMode || !sessionData) return;
     if (sessionData.usedQuestionIds) setUsedIds(new Set(sessionData.usedQuestionIds));
     if (sessionData.teamScores) {
-      const teams = Object.keys(sessionData.teamScores).sort();
-      setTeamScores([sessionData.teamScores[teams[0]] || 0, sessionData.teamScores[teams[1]] || 0]);
+      const scores = sessionData.teamScores;
+      const ts = showTeams.map(t => scores[t.id] || 0);
+      setTeamScores(ts);
     }
-    if (sessionData.isAnswerRevealed !== undefined) setShowAnswer(sessionData.isAnswerRevealed);
-    if (sessionData.feedback !== undefined) setFeedback(sessionData.feedback);
-    if (sessionData.revealAnswerInFeedback !== undefined) setRevealAnswerInFeedback(sessionData.revealAnswerInFeedback);
-  }, [sessionData, isRemoteMode]);
+    if (sessionData.isAnswerRevealed !== undefined && sessionData.isAnswerRevealed !== showAnswer) setShowAnswer(sessionData.isAnswerRevealed);
+    if (sessionData.feedback !== undefined && sessionData.feedback !== feedback) setFeedback(sessionData.feedback);
+    if (sessionData.revealAnswerInFeedback !== undefined && sessionData.revealAnswerInFeedback !== revealAnswerInFeedback) setRevealAnswerInFeedback(sessionData.revealAnswerInFeedback);
+    if (sessionData.cardView !== undefined && sessionData.cardView !== cardView) setCardView(sessionData.cardView as CardView);
+    if (sessionData.currentTeamIndex !== undefined && sessionData.currentTeamIndex !== currentTeamIndex) setCurrentTeamIndex(sessionData.currentTeamIndex);
+    if (sessionData.hasReboundAttempted !== undefined && sessionData.hasReboundAttempted !== hasReboundAttempted) setHasReboundAttempted(sessionData.hasReboundAttempted);
+    if (sessionData.attemptedTeamIndices !== undefined) {
+      const equal = sessionData.attemptedTeamIndices.length === attemptedTeamIndices.length &&
+        sessionData.attemptedTeamIndices.every((v, i) => v === attemptedTeamIndices[i]);
+      if (!equal) setAttemptedTeamIndices(sessionData.attemptedTeamIndices);
+    }
+  }, [sessionData, isRemoteMode, showTeams]);
 
   useEffect(() => {
-    if (!isRemoteMode || !sessionData?.activeQuestionId) {
-      if (!sessionData?.activeQuestionId && active) setActive(null);
+    const prevRemoteActiveId = prevRemoteActiveIdRef.current;
+    const remoteActiveId = sessionData?.activeQuestionId || null;
+    prevRemoteActiveIdRef.current = remoteActiveId;
+
+    if (!isRemoteMode || !sessionData) return;
+
+    if (!remoteActiveId) {
+      if (active && prevRemoteActiveId) {
+        setActive(null);
+      }
       return;
     }
-    const qId = sessionData.activeQuestionId;
+    const qId = remoteActiveId;
     if (active?.question.id !== qId) {
       game.categories.forEach(cat => {
         const q = cat.questions.find(qq => qq.id === qId);
         if (q) {
           setActive({ category: cat, question: q as JeopardyQuestion });
           setShowAnswer(sessionData.isAnswerRevealed || false);
+          if (sessionData.cardView !== undefined) setCardView(sessionData.cardView as CardView);
           setTimeLeft(TIMER_DURATION);
           setIsTimerRunning(false); // manual start
         }
       });
     }
-  }, [sessionData?.activeQuestionId, sessionData?.isAnswerRevealed, isRemoteMode, game.categories]);
+  }, [sessionData?.activeQuestionId, sessionData?.isAnswerRevealed, sessionData?.cardView, isRemoteMode, game.categories, active]);
 
   useEffect(() => {
-    if (!isRemoteMode || !sessionData?.hostCommand) return;
+    if (!isRemoteMode || !sessionData || !sessionData.hostCommand) return;
     const { type } = sessionData.hostCommand;
     if (type === "correct") handleCorrect();
     else if (type === "wrong") handleWrong();
-    else if (type === "show_answer" || type === "REVEAL_ANSWER") setShowAnswer(true);
+    else if (type === "show_answer" || type === "REVEAL_ANSWER") {
+      setShowAnswer(true);
+      setCardView("answer");
+    }
     else if (type === "feedback_continue") handleFeedbackContinue();
   }, [sessionData?.hostCommand, isRemoteMode]);
 
-  // Sync feedback state to Firebase remote session
+  // Sync state to Firebase remote session on changes (only from PC host)
   useEffect(() => {
-    if (isRemoteMode) {
-      updateSession({ feedback });
+    if (!isViewer && isRemoteMode) {
+      updateSession({
+        cardView,
+        isAnswerRevealed: showAnswer,
+        currentTeamIndex,
+        hasReboundAttempted,
+        revealAnswerInFeedback,
+        attemptedTeamIndices,
+        feedback
+      });
     }
-  }, [feedback, isRemoteMode]);
+  }, [isViewer, isRemoteMode, cardView, showAnswer, currentTeamIndex, hasReboundAttempted, revealAnswerInFeedback, attemptedTeamIndices, feedback]);
 
   // ── Timer ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -550,8 +630,8 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
 
   useEffect(() => {
     const count = game.cluesPerTeam ?? 2;
-    setClueUsage([{ remaining: count, usedTypes: [] }, { remaining: count, usedTypes: [] }]);
-  }, [game.id, game.cluesPerTeam]);
+    setClueUsage(Array(showTeams.length).fill(null).map(() => ({ remaining: count, usedTypes: [] })));
+  }, [game.id, game.cluesPerTeam, showTeams.length]);
 
   useEffect(() => {
     if (active?.question.questionMediaUrl) {
@@ -578,9 +658,22 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     setCardView("score");
     setIsTimerRunning(false);
     setHasReboundAttempted(false);
+    setAttemptedTeamIndices([]);
     setActiveClue(null);
     setShowClueMenu(false);
-    if (isRemoteMode) updateSession({ activeQuestionId: null, activeCategoryId: null, isAnswerRevealed: false });
+    setFeedback(null);
+    setRevealAnswerInFeedback(false);
+    if (isRemoteMode) {
+      updateSession({
+        activeQuestionId: null,
+        activeCategoryId: null,
+        isAnswerRevealed: false,
+        cardView: "score",
+        attemptedTeamIndices: [],
+        feedback: null,
+        revealAnswerInFeedback: false
+      });
+    }
   };
 
   const showFeedback = (
@@ -610,21 +703,22 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     }
   };
 
-  const advanceTurnAfterResolution = (result: "correct" | "wrong", basis: 0 | 1) => {
+  const advanceTurnAfterResolution = (result: "correct" | "wrong", basis: number) => {
     const shouldSwitch = result === "wrong" || game.turnMode === JeopardyTurnMode.ALTERNATE_AFTER_QUESTION;
-    const nextTeam = shouldSwitch ? otherTeam(basis) : basis;
+    const nextTeam = shouldSwitch ? (basis + 1) % showTeams.length : basis;
     setCurrentTeamIndex(nextTeam);
     setHasReboundAttempted(false);
+    setAttemptedTeamIndices([]);
     setActiveClue(null);
     setShowClueMenu(false);
   };
 
   const handleCorrect = () => {
-    if (!active || showAnswer) return;
+    if (!active) return;
     const pts = active.question.points || 0;
     const answeringTeam = currentTeamIndex;
     const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : answeringTeam;
-    const newScores = [...teamScores] as [number, number];
+    const newScores = [...teamScores];
 
     if (activeClue?.type === "ASK_OTHER_TEAM" && activeClue.targetTeam !== undefined) {
       const half = Math.ceil(pts / 2);
@@ -643,7 +737,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
               setShowAnswer(true);
               advanceTurnAfterResolution("correct", turnBasis);
             }
-          : undefined,
+          : () => {
+              advanceTurnAfterResolution("correct", turnBasis);
+              clearQuestionState();
+            },
       });
       return;
     }
@@ -651,8 +748,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     newScores[answeringTeam] += pts;
     setTeamScores(newScores);
     if (isRemoteMode && sessionData?.teamScores) {
-      const teams = Object.keys(sessionData.teamScores).sort();
-      updateSession({ teamScores: { ...sessionData.teamScores, [teams[answeringTeam]]: newScores[answeringTeam] } });
+      const teamId = showTeams[answeringTeam]?.id;
+      if (teamId) {
+        updateSession({ teamScores: { ...sessionData.teamScores, [teamId]: newScores[answeringTeam] } });
+      }
     }
     markUsed(active.question.id);
     setIsTimerRunning(false);
@@ -666,60 +765,78 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
             setShowAnswer(true);
             advanceTurnAfterResolution("correct", turnBasis);
           }
-        : undefined,
+        : () => {
+            advanceTurnAfterResolution("correct", turnBasis);
+            clearQuestionState();
+          },
     });
   };
 
   const handleWrong = (_isTimeout = false) => {
-    if (!active || showAnswer) return;
-    const reboundsAllowed = (game.allowRebounds ?? true) && activeClue?.type !== "ASK_OTHER_TEAM";
+    if (!active) return;
+    const totalTeamsCount = showTeams.length;
+    const nextAttempted = [...attemptedTeamIndices, currentTeamIndex];
+    const reboundsAllowed = (game.allowRebounds ?? true) && activeClue?.type !== "ASK_OTHER_TEAM" && !showAnswer;
     const pts = active.question.points || 0;
     const failingTeam = currentTeamIndex;
-    const newScores = [...teamScores] as [number, number];
+    const newScores = [...teamScores];
 
     // Subtract points from the team that failed
     newScores[failingTeam] -= pts;
     setTeamScores(newScores);
     if (isRemoteMode && sessionData?.teamScores) {
-      const teams = Object.keys(sessionData.teamScores).sort();
-      updateSession({ teamScores: { ...sessionData.teamScores, [teams[failingTeam]]: newScores[failingTeam] } });
+      const teamId = showTeams[failingTeam]?.id;
+      if (teamId) {
+        updateSession({ teamScores: { ...sessionData.teamScores, [teamId]: newScores[failingTeam] } });
+      }
     }
 
-    if (reboundsAllowed && !hasReboundAttempted) {
-      setHasReboundAttempted(true);
-      const nextTeam = otherTeam(currentTeamIndex);
+    if (reboundsAllowed && nextAttempted.length < totalTeamsCount) {
+      setAttemptedTeamIndices(nextAttempted);
+      const nextTeam = getNextReboundTeam(failingTeam, nextAttempted);
       setCurrentTeamIndex(nextTeam);
       setIsTimerRunning(false);
       setTimeLeft(TIMER_DURATION);
       showFeedback("wrong", {
         closeAfter: false,
+        revealAnswer: false, // DO NOT reveal answer on intermediate rebound
         onComplete: () => {
           setIsTimerRunning(true);
           if (isRemoteMode) updateSession({ isTimerRunning: true });
         }
       });
-      if (isRemoteMode) updateSession({ currentTeamIndex: nextTeam, hasReboundAttempted: true });
       return;
     }
 
     markUsed(active.question.id);
     setIsTimerRunning(false);
 
-    const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : currentTeamIndex;
+    const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : failingTeam;
+    const hasExplanation = !!active.question.explanation?.trim();
+    
     showFeedback("wrong", {
-      closeAfter: true,
+      closeAfter: !hasExplanation,
       revealAnswer: true, // REVEAL answer on final wrong
-      onComplete: () => {
-        advanceTurnAfterResolution("wrong", turnBasis);
-        clearQuestionState();
-        if (isRemoteMode) {
-          updateSession({ activeQuestionId: null, hasReboundAttempted: false, currentTeamIndex: (turnBasis === 0 ? 1 : 0) });
-        }
-      },
+      onComplete: hasExplanation
+        ? () => {
+            setCardView("answer");
+            setShowAnswer(true);
+            advanceTurnAfterResolution("wrong", turnBasis);
+          }
+        : () => {
+            advanceTurnAfterResolution("wrong", turnBasis);
+            clearQuestionState();
+            if (isRemoteMode) {
+              updateSession({
+                activeQuestionId: null,
+                hasReboundAttempted: false,
+                currentTeamIndex: (turnBasis + 1) % showTeams.length,
+                cardView: "score"
+              });
+            }
+          },
     });
   };
-
-  const teamLabel = (index: 0 | 1) => game.teams?.[index] || `Team ${index + 1}`;
   const explanationPlacement = active?.question.explanationPlacement || "WITH_ANSWER";
 
   const getHostCue = () => {
@@ -736,10 +853,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     if (usage.remaining <= 0 || usage.usedTypes.includes(type)) return;
 
     const updatedTeam: TeamClueUsage = { remaining: Math.max(0, usage.remaining - 1), usedTypes: [...usage.usedTypes, type] };
-    setClueUsage(prev => [teamIdx === 0 ? updatedTeam : prev[0], teamIdx === 1 ? updatedTeam : prev[1]] as [TeamClueUsage, TeamClueUsage]);
+    setClueUsage(prev => prev.map((item, idx) => idx === teamIdx ? updatedTeam : item));
 
     if (type === "ASK_OTHER_TEAM") {
-      const helperTeam = otherTeam(teamIdx);
+      const helperTeam = otherTeam(teamIdx, showTeams.length);
       setActiveClue({ type, usedBy: teamIdx, targetTeam: helperTeam });
       setCurrentTeamIndex(helperTeam);
       setHasReboundAttempted(false);
@@ -766,6 +883,17 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     setShowClueMenu(false);
     setTimeLeft(TIMER_DURATION);
     setIsTimerRunning(false); // ← host starts manually
+
+    if (isRemoteMode) {
+      updateSession({
+        activeQuestionId: question.id,
+        activeCategoryId: category.id,
+        isAnswerRevealed: false,
+        cardView: "question",
+        attemptedTeamIndices: [],
+        hasReboundAttempted: false
+      });
+    }
   };
 
   // Debug media URL
@@ -809,7 +937,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
           </div>
           
           <div className="flex items-center gap-6">
-            {([0, 1] as const).map(index => {
+            {showTeams.map((_, index) => {
               const isTurn = currentTeamIndex === index;
               return (
                 <div
@@ -903,7 +1031,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3 text-sm">
-            {([0, 1] as const).map(index => (
+            {showTeams.map((_, index) => (
               <div
                 key={index}
                 className={`px-3 py-1 rounded-lg border transition-all ${
@@ -920,7 +1048,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
               </div>
             ))}
           </div>
-          <button onClick={onExit} className="bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg">
+          <button onClick={handleExitClick} className="bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg">
             Exit Game
           </button>
         </div>
@@ -1063,7 +1191,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                         <p className="text-blue-100 font-semibold text-sm">
                           {activeClue.type === "CALL_FRIEND" && `${teamLabel(activeClue.usedBy)} is calling a friend for help.`}
                           {activeClue.type === "ASK_HOST" && `${teamLabel(activeClue.usedBy)} asked the host for a cue.`}
-                          {activeClue.type === "ASK_OTHER_TEAM" && `${teamLabel(activeClue.usedBy)} asked ${teamLabel(activeClue.targetTeam ?? otherTeam(activeClue.usedBy))} to answer and split the points.`}
+                          {activeClue.type === "ASK_OTHER_TEAM" && `${teamLabel(activeClue.usedBy)} asked ${teamLabel(activeClue.targetTeam ?? otherTeam(activeClue.usedBy, showTeams.length))} to answer and split the points.`}
                         </p>
                         {activeClue.note && <p className="text-xs text-blue-200">{activeClue.note}</p>}
                       </div>
@@ -1101,7 +1229,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                       <p className="text-blue-100 font-semibold">
                         {activeClue.type === "CALL_FRIEND" && `${teamLabel(activeClue.usedBy)} is calling a friend for help.`}
                         {activeClue.type === "ASK_HOST" && `${teamLabel(activeClue.usedBy)} asked the host for a cue.`}
-                        {activeClue.type === "ASK_OTHER_TEAM" && `${teamLabel(activeClue.usedBy)} asked ${teamLabel(activeClue.targetTeam ?? otherTeam(activeClue.usedBy))} to answer and split the points.`}
+                        {activeClue.type === "ASK_OTHER_TEAM" && `${teamLabel(activeClue.usedBy)} asked ${teamLabel(activeClue.targetTeam ?? otherTeam(activeClue.usedBy, showTeams.length))} to answer and split the points.`}
                       </p>
                       {activeClue.note && <p className="text-sm text-blue-200">{activeClue.note}</p>}
                     </div>
@@ -1136,12 +1264,20 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                     {lang === "es" ? "Continuar" : "Continue"}
                   </button>
                 ) : showAnswer ? (
-                  <button
-                    onClick={clearQuestionState}
-                    className="px-8 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 text-xl shadow-lg ring-4 ring-blue-400 animate-pulse"
-                  >
-                    Next (Return to Grid)
-                  </button>
+                  <>
+                    <button onClick={() => handleWrong()} className="px-6 py-3 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-500 text-lg">
+                      Wrong (W)
+                    </button>
+                    <button
+                      onClick={clearQuestionState}
+                      className="px-8 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 text-xl shadow-lg ring-4 ring-blue-400 animate-pulse"
+                    >
+                      Next (Return to Grid)
+                    </button>
+                    <button onClick={handleCorrect} className="px-6 py-3 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 text-lg">
+                      Correct (R)
+                    </button>
+                  </>
                 ) : (
                   <>
                     <button

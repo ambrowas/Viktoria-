@@ -54,6 +54,12 @@ export interface LiveSession {
         label: string;
         timestamp: number;
     } | null;
+    feedback?: 'correct' | 'wrong' | null;
+    revealAnswerInFeedback?: boolean;
+    attemptedTeamIndices?: number[];
+    isTimerRunning?: boolean;
+    timeLeft?: number;
+    cardView?: string;
     lastAction: string;
     updatedAt: any;
 }

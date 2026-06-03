@@ -110,7 +110,7 @@ export enum JeopardyTurnMode {
 export interface JeopardyGame extends GameBase {
   type: GameType.JEOPARDY;
   categories: JeopardyCategory[];
-  teams: [string, string];
+  teams?: string[];
   turnMode?: JeopardyTurnMode;
   allowRebounds?: boolean;
   cluesPerTeam?: number;

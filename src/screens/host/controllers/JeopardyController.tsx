@@ -14,6 +14,15 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
     const { sessionState } = sessionData;
     const usedIds = new Set<string>(sessionData.usedQuestionIds || []);
     const activeQuestionId = sessionData.activeQuestionId;
+    const teamScoresData = sessionData.teamScores || {};
+    const showTeams = sessionData.teams || [];
+    let sortedTeamIds = showTeams.map((t: any) => t.id);
+    if (sortedTeamIds.length === 0) {
+        sortedTeamIds = Object.keys(teamScoresData).sort();
+    }
+    if (sortedTeamIds.length === 0) {
+        sortedTeamIds = ['team_A', 'team_B'];
+    }
 
     const categories = game.categories || [];
 
@@ -38,7 +47,8 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
             activeCategoryId: catId,
             isAnswerRevealed: false,
             isTimerRunning: true,
-            timeLeft: 30
+            timeLeft: 30,
+            cardView: "question"
         });
     };
 
@@ -51,15 +61,12 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                 timestamp: Date.now()
             },
             // If revealing, update state
-            ...(action === 'show_answer' ? { isAnswerRevealed: true } : {})
+            ...(action === 'show_answer' ? { isAnswerRevealed: true, cardView: "answer" } : {})
         });
     };
 
-    const handleAdjustScore = (teamIndex: number, amount: number) => {
+    const handleAdjustScore = (teamId: string, amount: number) => {
         if (!sessionData.teamScores) return;
-        const teams = Object.keys(sessionData.teamScores).sort();
-        const teamId = teams[teamIndex];
-        if (!teamId) return;
 
         updateSession({
             teamScores: {
@@ -72,11 +79,66 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
     return (
         <div className="flex flex-col h-full bg-[#0a0a0a] text-white">
             {activeQuestion ? (
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="flex-1 flex flex-col p-6 overflow-auto bg-gradient-to-b from-[#14213d]/20 to-[#0a0a0a]"
-                >
+                sessionData.cardView === "answer" ? (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="flex-1 flex flex-col p-6 overflow-auto bg-gradient-to-b from-emerald-950/20 to-[#0a0a0a]"
+                    >
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#fca311]">{activeCategory?.name}</span>
+                                <h2 className="text-3xl font-black text-white">${(activeQuestion as JeopardyQuestion).points}</h2>
+                            </div>
+                            <button
+                                onClick={() => updateSession({ activeQuestionId: null, isAnswerRevealed: false, cardView: "score" })}
+                                className="bg-white/5 border border-white/10 px-4 py-2 rounded-xl text-xs font-black uppercase hover:bg-white/10 transition-colors"
+                            >
+                                ← SALIR
+                            </button>
+                        </div>
+
+                        <div className="flex-1 space-y-6 flex flex-col justify-center max-w-xl mx-auto w-full">
+                            <div className="bg-emerald-900/40 p-8 rounded-3xl border border-emerald-500/30 text-center space-y-4">
+                                <span className="text-[10px] text-emerald-400 font-black uppercase tracking-widest">Correct Answer</span>
+                                <p className="text-3xl font-black text-white">{(activeQuestion as JeopardyQuestion).correctAnswer}</p>
+                            </div>
+
+                            {(activeQuestion as JeopardyQuestion).explanation && (
+                                <div className="bg-white/5 p-8 rounded-3xl border border-white/10 text-center space-y-3">
+                                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Explanation</span>
+                                    <p className="text-lg font-medium text-slate-200 leading-relaxed">{(activeQuestion as JeopardyQuestion).explanation}</p>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-3 gap-4 mt-4">
+                                <button
+                                    onClick={() => handleAction('wrong')}
+                                    className="bg-red-500/10 text-red-500 border border-red-500/30 p-6 rounded-2xl font-black flex flex-col items-center justify-center gap-3 hover:bg-red-500/20 active:scale-95 transition-all text-xs"
+                                >
+                                    <XCircle size={32} /> FAIL
+                                </button>
+                                <button
+                                    onClick={() => updateSession({ activeQuestionId: null, isAnswerRevealed: false, cardView: "score" })}
+                                    className="bg-[#fca311] text-black hover:bg-[#fca311]/90 p-6 rounded-2xl font-black flex flex-col items-center justify-center text-center gap-3 active:scale-95 transition-all text-xs"
+                                >
+                                    <Eye size={32} /> CLOSE
+                                </button>
+                                <button
+                                    onClick={() => handleAction('correct')}
+                                    className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 p-6 rounded-2xl font-black flex flex-col items-center justify-center gap-3 hover:bg-emerald-500/20 active:scale-95 transition-all text-xs"
+                                >
+                                    <CheckCircle size={32} /> SUCCESS
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
+                ) : (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="flex-1 flex flex-col p-6 overflow-auto bg-gradient-to-b from-[#14213d]/20 to-[#0a0a0a]"
+                    >
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#fca311]">{activeCategory?.name}</span>
@@ -123,7 +185,22 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                         </div>
 
                         {sessionData.feedback ? (
-                            <div className="pt-4">
+                            <div className="pt-4 space-y-4">
+                                <div className={`p-6 rounded-3xl border-2 text-center flex flex-col items-center gap-2 ${
+                                    sessionData.feedback === 'correct'
+                                        ? 'bg-emerald-950/60 border-emerald-500 text-emerald-400'
+                                        : 'bg-red-950/60 border-red-500 text-red-400'
+                                }`}>
+                                    <span className="text-4xl">{sessionData.feedback === 'correct' ? "🏆" : "❌"}</span>
+                                    <h3 className="text-xl font-black uppercase tracking-wider">
+                                        {sessionData.feedback === 'correct' ? 'SUCCESS / ¡CORRECTO!' : 'FAIL / ¡INCORRECTO!'}
+                                    </h3>
+                                    {sessionData.feedback === 'wrong' && (
+                                        <p className="text-sm font-bold text-slate-300 mt-2">
+                                            Correct Answer: <span className="text-white underline">{activeQuestion?.correctAnswer}</span>
+                                        </p>
+                                    )}
+                                </div>
                                 <button
                                     onClick={() => handleAction('feedback_continue')}
                                     className="w-full bg-[#fca311] text-black hover:bg-[#fca311]/90 p-8 rounded-3xl font-black text-xl flex flex-col items-center justify-center gap-2 shadow-2xl active:scale-95 transition-all glow-orange-active border-2 border-yellow-400 animate-pulse"
@@ -158,22 +235,24 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                         )}
 
                         {/* Team Selection Glow */}
-                        <div className="flex gap-4 p-4 bg-white/5 rounded-3xl border border-white/5">
-                            {[0, 1].map((idx) => {
-                                const teamKey = idx === 0 ? 'A' : 'B';
-                                const isBuzzed = sessionData.buzzedTeam === teamKey;
+                        <div className="flex gap-4 p-4 bg-white/5 rounded-3xl border border-white/5 overflow-x-auto">
+                            {sortedTeamIds.map((teamId: string, idx: number) => {
+                                const teamObj = showTeams.find((t: any) => t.id === teamId);
+                                const teamName = teamObj?.name || game.teams?.[idx] || `Team ${idx + 1}`;
+                                const teamKey = idx === 0 ? 'A' : idx === 1 ? 'B' : '';
+                                const isBuzzed = sessionData.buzzedTeam === teamId || (teamKey && sessionData.buzzedTeam === teamKey);
                                 return (
-                                    <div key={idx} className={`flex-1 p-4 rounded-2xl border transition-all ${isBuzzed ? 'bg-emerald-500/20 border-emerald-400 animate-pulse shadow-[0_0_20px_rgba(16,185,129,0.2)]' : 'bg-black/40 border-white/5'}`}>
-                                        <p className="text-[10px] font-black uppercase text-slate-500 mb-2 text-center tracking-widest">Team {teamKey}</p>
+                                    <div key={teamId} className={`flex-1 min-w-[120px] p-4 rounded-2xl border transition-all ${isBuzzed ? 'bg-emerald-500/20 border-emerald-400 animate-pulse shadow-[0_0_20px_rgba(16,185,129,0.2)]' : 'bg-black/40 border-white/5'}`}>
+                                        <p className="text-[10px] font-black uppercase text-slate-500 mb-2 text-center tracking-widest">{teamName}</p>
                                         <div className="flex gap-2 justify-center">
                                             <button
-                                                onClick={() => handleAdjustScore(idx, -(activeQuestion?.points || 100))}
+                                                onClick={() => handleAdjustScore(teamId, -(activeQuestion?.points || 100))}
                                                 className="px-3 py-2 bg-red-500/10 text-red-400 rounded-xl text-xs font-black border border-red-500/20"
                                             >
                                                 -{activeQuestion?.points}
                                             </button>
                                             <button
-                                                onClick={() => handleAdjustScore(idx, activeQuestion?.points || 100)}
+                                                onClick={() => handleAdjustScore(teamId, activeQuestion?.points || 100)}
                                                 className="px-3 py-2 bg-emerald-500/10 text-emerald-400 rounded-xl text-xs font-black border border-emerald-500/20"
                                             >
                                                 +{activeQuestion?.points}
@@ -185,8 +264,34 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                         </div>
                     </div>
                 </motion.div>
-            ) : (
-                <div className="flex-1 overflow-auto p-4 space-y-8 pb-12">
+            )) : (
+                <div className="flex-1 overflow-auto p-6 space-y-8 pb-12">
+                    <div className="flex justify-between items-center bg-white/5 border border-white/5 rounded-3xl p-6 premium-glass">
+                        <div className="text-left">
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#fca311]">Jeopardy Board</span>
+                            <h2 className="text-2xl font-black text-white">{game.name || 'Jeopardy Grid'}</h2>
+                        </div>
+                        <button
+                            onClick={() => {
+                                if (window.confirm("Are you sure you want to RESTART the grid? This will make all questions available again.")) {
+                                    updateSession({
+                                        usedQuestionIds: [],
+                                        activeQuestionId: null,
+                                        isAnswerRevealed: false,
+                                        feedback: null,
+                                        currentTeamIndex: 0,
+                                        cardView: "score",
+                                        attemptedTeamIndices: [],
+                                        hasReboundAttempted: false
+                                    });
+                                }
+                            }}
+                            className="bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-[0_0_15px_rgba(239,68,68,0.1)]"
+                        >
+                            Reset Grid
+                        </button>
+                    </div>
+
                     {categories.map((cat) => (
                         <div key={cat.id} className="space-y-4">
                             <div className="flex items-center gap-3">

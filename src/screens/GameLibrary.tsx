@@ -155,7 +155,7 @@ const GameLibrary: React.FC<LibraryProps> = ({
 
           return (
             <div
-              key={game.id}
+              key={`${game.id}-${game.slug || ""}`}
               className="relative bg-[#1b2132] border border-[#2f3b57] p-5 rounded-lg overflow-hidden transition-transform transform hover:-translate-y-1 hover:shadow-lg hover:shadow-[#0a0e16]/50"
               style={{ borderTop: `3px solid ${accent}` }}
             >

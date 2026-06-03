@@ -333,7 +333,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
     if (!game) return null;
 
     return (
-      <Draggable draggableId={gameId} index={index}>
+      <Draggable key={gameId} draggableId={gameId} index={index}>
         {(provided, snapshot) => (
           <div
             ref={provided.innerRef}
@@ -364,7 +364,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
     if (!game) return null;
 
     return (
-      <Draggable draggableId={gameId} index={index}>
+      <Draggable key={gameId} draggableId={gameId} index={index}>
         {(provided, snapshot) => (
           <div
             ref={provided.innerRef}

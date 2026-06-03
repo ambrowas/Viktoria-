@@ -64,6 +64,7 @@ describe('localGameService', () => {
       slug: 'test-game',
       name: 'Test Game',
       type: 'JEOPARDY' as GameType.JEOPARDY,
+      description: '',
       createdAt: new Date().toISOString(),
       categories: [],
     };

@@ -52,8 +52,8 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
     const t = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS.en;
 
     const [step, setStep] = useState<ShowStep>(initialState?.step || "intro");
-    const [currentRoundIndex, setCurrentRoundIndex] = useState(initialState?.currentRoundIndex || 0);
-    const [currentGameIndex, setCurrentGameIndex] = useState(initialState?.currentGameIndex || 0);
+    const [currentRoundIndex, setCurrentRoundIndex] = useState<number>(initialState?.currentRoundIndex || 0);
+    const [currentGameIndex, setCurrentGameIndex] = useState<number>(initialState?.currentGameIndex || 0);
     const [countdown, setCountdown] = useState(20);
     const [teamScores, setTeamScores] = useState<Record<string, number>>(() => {
         if (initialState?.teamScores) {
@@ -141,7 +141,7 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
 
         if (needsRemote) {
             console.log("ShowRunner: Starting remote session...");
-            startSession(show.id, teamScores)
+            startSession({ currentGameId: show.id, teamScores, teams: show.teams })
                 .then(id => console.log("ShowRunner: startSession SUCCESS. sessionId:", id))
                 .catch(err => {
                     console.error("ShowRunner: Failed to start session:", err);
@@ -170,7 +170,7 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
         const needsRemote = hostControl === 'ipad' || playerControl === 'ipad';
         if (needsRemote && (step === 'lobby' || step === 'playing') && !sessionId) {
             console.log("ShowRunner Watchdog: No session found in", step, ". Restarting...");
-            startSession(show.id, teamScores).catch(e => console.error("Watchdog failed:", e));
+            startSession({ currentGameId: show.id, teamScores, teams: show.teams }).catch(e => console.error("Watchdog failed:", e));
         }
     }, [step, sessionId, show.id, startSession, hostControl, playerControl]);
 
@@ -235,10 +235,11 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
                 currentGameIndex,
                 currentStep: step,
                 teamScores,
+                teams: show.teams,
                 fullGameData: currentGame || null, // 📡 MISSION 29: Pass game data to Host iPad
             });
         }
-    }, [step, currentRoundIndex, currentGameIndex, teamScores, isRemoteMode, show.id, updateSession]);
+    }, [step, currentRoundIndex, currentGameIndex, teamScores, isRemoteMode, show.id, updateSession, show.teams, currentGame]);
 
     // Save show progress to localStorage automatically (only on Host side)
     useEffect(() => {
@@ -558,7 +559,7 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
                         </h2>
 
                         <div className="space-y-4 mb-12">
-                            {show.teams
+                            {[...show.teams]
                                 .sort((a, b) => (teamScores[b.id] || 0) - (teamScores[a.id] || 0))
                                 .map((team, index) => (
                                     <motion.div
@@ -593,7 +594,14 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
                             <div className="flex justify-center gap-6">
                                 {step === "final_results" ? (
                                     <button
-                                        onClick={onExit}
+                                        onClick={() => {
+                                            const confirmMsg = lang === "es"
+                                                ? "¿Seguro que quieres salir y volver al panel principal?"
+                                                : "Are you sure you want to exit and return to the dashboard?";
+                                            if (window.confirm(confirmMsg)) {
+                                                onExit();
+                                            }
+                                        }}
                                         className="px-8 py-4 bg-base-200 border border-base-300 rounded-xl hover:bg-base-300 transition-colors flex items-center gap-3 text-xl font-bold"
                                     >
                                         <Home /> BACK TO DASHBOARD
@@ -601,7 +609,11 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
                                 ) : (
                                     <>
                                         <button
-                                            onClick={onExit}
+                                            onClick={() => {
+                                                if (window.confirm("Are you sure you want to save and exit the show?")) {
+                                                    onExit();
+                                                }
+                                            }}
                                             className="px-8 py-4 bg-red-600/10 text-red-400 border border-red-600/30 rounded-xl hover:bg-red-600/20 transition-colors flex items-center gap-3 font-bold"
                                         >
                                             SAVE &amp; EXIT

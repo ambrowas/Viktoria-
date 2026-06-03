@@ -41,7 +41,9 @@ const ShowHostController: React.FC<ShowHostControllerProps> = ({ show }) => {
     };
 
     const handleExitShow = () => {
-        updateSession({ hostCommand: { type: 'exit_show', payload: {}, timestamp: Date.now() } });
+        if (window.confirm("Are you sure you want to save and exit the show?")) {
+            updateSession({ hostCommand: { type: 'exit_show', payload: {}, timestamp: Date.now() } });
+        }
     };
 
     if (currentStep === 'lobby') {
@@ -459,7 +461,7 @@ const ShowHostController: React.FC<ShowHostControllerProps> = ({ show }) => {
                         Team Leaderboard & Adjustments
                     </h3>
                     <div className="space-y-3">
-                        {show.teams
+                        {[...show.teams]
                             .sort((a, b) => (teamScores[b.id] || 0) - (teamScores[a.id] || 0))
                             .map((team, index) => {
                                 const score = teamScores[team.id] || 0;

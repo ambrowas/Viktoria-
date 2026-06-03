@@ -76,7 +76,7 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, hostControl
 
             {/* Main Content Grid */}
             <div className="flex-1 grid grid-cols-4 gap-8 mb-40">
-                {teams.map((team, idx) => {
+                {[...teams].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })).map((team, idx) => {
                     const members = getTeamParticipants(team.id);
                     return (
                         <motion.div
