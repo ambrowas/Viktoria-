@@ -25,6 +25,18 @@ const TeamIcon: React.FC<TeamIconProps> = ({ iconName, className = "w-6 h-6", st
         crown: Icons.CrownIcon,
     };
 
+    if (iconName.toLowerCase().startsWith("mask")) {
+        const capitalized = iconName.charAt(0).toUpperCase() + iconName.slice(1);
+        return (
+            <img 
+                src={`/images/${capitalized}.png`} 
+                className={className} 
+                style={{ ...style, objectFit: 'contain' }} 
+                alt={`${iconName} Team Icon`} 
+            />
+        );
+    }
+
     const IconComponent = iconMap[iconName.toLowerCase()];
 
     if (!IconComponent) {

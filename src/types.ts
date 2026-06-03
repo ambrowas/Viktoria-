@@ -317,6 +317,21 @@ export interface Team {
   players: Player[];
 }
 
+export interface Organizer {
+  id: string;
+  role: string;
+  name: string;
+}
+
+export interface ShowMediaItem {
+  id: string;
+  name?: string;
+  url: string;
+  size: "small" | "medium" | "large";
+  placement: "lobby" | "header" | "footer" | "credits" | "sidebar" | "commercial";
+  screen: "tv" | "host" | "both";
+}
+
 export interface ShowSettings {
   numTeams: number;
   playersPerTeam: number;
@@ -328,6 +343,9 @@ export interface ShowSettings {
   language?: "en" | "es";
   location?: string;
   musicInLobby?: boolean;
+  winnerTitle?: string;
+  thankYouMessage?: string;
+  organizers?: Organizer[];
 }
 
 export interface ShowRound {
@@ -346,6 +364,9 @@ export interface Show {
   settings: ShowSettings;
   teams: Team[];
   rounds: ShowRound[];
+  sponsors?: ShowMediaItem[];
+  assets?: ShowMediaItem[];
+  themeImage?: string;
   createdAt: string;
   updatedAt?: string;
 }

@@ -4,6 +4,7 @@ import { useSync } from "@/context/SyncContext";
 import { correctSound, wrongSound, timerSound } from "@/utils/sound";
 import { resolveMediaUrl } from "@/utils/media";
 import { useLanguage } from "@/context/LanguageContext";
+import { RotateCcw, LogOut } from "lucide-react";
 
 const TIMER_DURATION = 30;
 const CARD_BACK_IMG = resolveMediaUrl("images/TADTSlogo.jpg");
@@ -27,6 +28,7 @@ interface ActiveClueState {
 interface JeopardyGameProps {
   game: JeopardyGame;
   onExit: (points?: Record<string, number>) => void;
+  onReturnToMainMenu?: (points?: Record<string, number>) => void;
   isViewer?: boolean;
   teams?: Team[];
   teamScores?: Record<string, number>;
@@ -71,6 +73,16 @@ const hasVisualMedia = (url?: string, type?: string) => {
   return !!url && (type === "IMAGE" || type === "VIDEO");
 };
 
+const inferMediaType = (url?: string): "IMAGE" | "AUDIO" | "VIDEO" | undefined => {
+  if (!url) return undefined;
+  const lower = url.toLowerCase();
+  if (lower.startsWith("data:image") || /\.(jpg|jpeg|png|gif|webp|svg)$/.test(lower)) return "IMAGE";
+  if (lower.startsWith("data:audio") || /\.(mp3|wav|ogg)$/.test(lower)) return "AUDIO";
+  if (lower.startsWith("data:video") || /\.(mp4|webm|mov)$/.test(lower)) return "VIDEO";
+  return undefined;
+};
+
+
 // ── TV score overlay (cards shown center of board) ────────────────────────────
 const TVScoreOverlay: React.FC<{
   active: { category: JeopardyCategory; question: JeopardyQuestion } | null;
@@ -83,6 +95,11 @@ const TVScoreOverlay: React.FC<{
   hasReboundAttempted: boolean;
 }> = ({ active, cardView, currentTeamIndex, teamScores, teamLabels, timeLeft, activeClue, hasReboundAttempted }) => {
   if (!active) return null;
+
+  const questionMediaType = active.question.questionMediaType || inferMediaType(active.question.questionMediaUrl);
+  const answerMediaType = active.question.answerMediaType || inferMediaType(active.question.answerMediaUrl);
+  const hasVisualQuestion = hasVisualMedia(active.question.questionMediaUrl, questionMediaType);
+  const hasVisualAnswer = hasVisualMedia(active.question.answerMediaUrl, answerMediaType);
 
   return (
     <div className="absolute inset-0 flex items-center justify-center z-20 bg-slate-950/90 backdrop-blur-md pointer-events-none">
@@ -168,20 +185,20 @@ const TVScoreOverlay: React.FC<{
         {/* Question view */}
         {cardView === "question" && (
           <div className="flex-1 w-full flex flex-col min-h-0 justify-center">
-            {active.question.questionMediaUrl && active.question.questionMediaType ? (
+            {active.question.questionMediaUrl && questionMediaType ? (
               <div className="grid grid-cols-12 gap-8 w-full items-center min-h-0 flex-1">
                 {/* Left Column: Media (7 cols) */}
                 <div className="col-span-7 bg-blue-950/40 border border-blue-500/30 rounded-2xl p-4 flex justify-center items-center h-full max-h-[52vh] overflow-hidden">
-                  {active.question.questionMediaType === "IMAGE" && (
+                  {questionMediaType === "IMAGE" && (
                     <img src={resolveMediaUrl(active.question.questionMediaUrl)} alt="Question" className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" />
                   )}
-                  {active.question.questionMediaType === "AUDIO" && (
+                  {questionMediaType === "AUDIO" && (
                     <div className="w-full flex flex-col items-center justify-center p-8 bg-blue-900/40 rounded-xl">
                       <span className="text-7xl mb-4">🎵</span>
                       <audio controls autoPlay src={resolveMediaUrl(active.question.questionMediaUrl)} className="w-full max-w-md" />
                     </div>
                   )}
-                  {active.question.questionMediaType === "VIDEO" && (
+                  {questionMediaType === "VIDEO" && (
                     <video controls autoPlay src={resolveMediaUrl(active.question.questionMediaUrl)} className="max-w-full max-h-full rounded-xl object-contain" />
                   )}
                 </div>
@@ -251,25 +268,25 @@ const TVScoreOverlay: React.FC<{
         {/* Answer view */}
         {cardView === "answer" && (
           <div className="max-w-[95vw] w-full text-center flex flex-col min-h-0 justify-center">
-            {hasVisualMedia(active.question.answerMediaUrl, active.question.answerMediaType) || hasVisualMedia(active.question.questionMediaUrl, active.question.questionMediaType) ? (
+            {hasVisualAnswer || hasVisualQuestion ? (
               <div className="grid grid-cols-12 gap-8 w-full items-center min-h-0 flex-1">
                 {/* Left Column: Answer/Question Media (7 cols) */}
                 <div className="col-span-7 bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-4 flex justify-center items-center h-full max-h-[52vh] overflow-hidden">
-                  {hasVisualMedia(active.question.answerMediaUrl, active.question.answerMediaType) ? (
+                  {hasVisualAnswer ? (
                     <>
-                      {active.question.answerMediaType === "IMAGE" && (
+                      {answerMediaType === "IMAGE" && (
                         <img src={resolveMediaUrl(active.question.answerMediaUrl)} alt="Answer media" className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" />
                       )}
-                      {active.question.answerMediaType === "VIDEO" && (
+                      {answerMediaType === "VIDEO" && (
                         <video controls src={resolveMediaUrl(active.question.answerMediaUrl)} className="max-w-full max-h-full rounded-xl object-contain" />
                       )}
                     </>
                   ) : (
                     <>
-                      {active.question.questionMediaType === "IMAGE" && (
+                      {questionMediaType === "IMAGE" && (
                         <img src={resolveMediaUrl(active.question.questionMediaUrl)} alt="Question media" className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" />
                       )}
-                      {active.question.questionMediaType === "VIDEO" && (
+                      {questionMediaType === "VIDEO" && (
                         <video controls src={resolveMediaUrl(active.question.questionMediaUrl)} className="max-w-full max-h-full rounded-xl object-contain" />
                       )}
                     </>
@@ -304,7 +321,7 @@ const TVScoreOverlay: React.FC<{
   );
 };
 
-const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" | null; correctAnswer?: string; points?: number }> = ({ type, correctAnswer, points }) => {
+const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" | null; correctAnswer?: string; points?: number; isRebound?: boolean }> = ({ type, correctAnswer, points, isRebound }) => {
   if (!type) return null;
   const isCorrect = type === "correct";
   return (
@@ -343,9 +360,15 @@ const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" | null; correctAnswe
             : "bg-red-950/95 border-red-500 text-red-400 shadow-red-900/50 animate-fade-in"
         }`}
       >
-        <span className="text-8xl">{isCorrect ? "🏆" : "❌"}</span>
+        <div className="w-32 h-32 flex items-center justify-center mb-2 select-none pointer-events-none">
+          <img
+            src={isCorrect ? "/images/correct.png" : "/images/incorrect.png"}
+            alt={isCorrect ? "Correct" : "Incorrect"}
+            className="w-full h-full object-contain animate-bounce"
+          />
+        </div>
         <h2 className="text-5xl font-black uppercase tracking-wide mt-2 max-w-4xl leading-snug">
-          {isCorrect ? "Correct!" : "YOU HAVE THE WRONG ANSWER"}
+          {isCorrect ? "Correct!" : isRebound ? "REBOUND!" : "YOU HAVE THE WRONG ANSWER"}
         </h2>
         {!isCorrect && correctAnswer && (
           <p className="text-3xl font-extrabold uppercase tracking-wide text-red-200 mt-2 max-w-4xl leading-relaxed">
@@ -370,7 +393,7 @@ const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" | null; correctAnswe
 };
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
-const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewer = false, teams, teamScores: initialTeamScores, onScoreChange }) => {
+const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onReturnToMainMenu, isViewer = false, teams, teamScores: initialTeamScores, onScoreChange }) => {
   const { sessionData, updateSession, isRemoteMode } = useSync();
   const { lang } = useLanguage();
 
@@ -398,6 +421,8 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
   };
 
   const [active, setActive] = useState<{ category: JeopardyCategory; question: JeopardyQuestion } | null>(null);
+  const activeQuestionMediaType = active?.question.questionMediaType || inferMediaType(active?.question.questionMediaUrl);
+  const activeAnswerMediaType = active?.question.answerMediaType || inferMediaType(active?.question.answerMediaUrl);
   const [showAnswer, setShowAnswer] = useState(false);
   const [cardView, setCardView] = useState<CardView>("score");
   const [usedIds, setUsedIds] = useState<Set<string>>(new Set());
@@ -418,7 +443,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
   const prevRemoteActiveIdRef = useRef<string | null>(null);
 
   const handleExitClick = () => {
-    const msg = lang === "es" ? "¿Estás seguro de que deseas salir del juego?" : "Are you sure you want to exit the game?";
+    const msg = lang === "es" ? "¿Estás seguro de que deseas salir del juego?" : "Are you want to exit the game?";
     if (window.confirm(msg)) {
       const earnedPoints: Record<string, number> = {};
       showTeams.forEach((t, idx) => {
@@ -426,6 +451,61 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
         earnedPoints[t.id] = teamScores[idx] - initial;
       });
       onExit(earnedPoints);
+    }
+  };
+
+  const handleRestartClick = () => {
+    const msg = lang === "es"
+      ? "¿Estás seguro de que deseas reiniciar este juego? Se restablecerán las puntuaciones y preguntas de esta partida."
+      : "Are you sure you want to restart this game? This will reset the scores and questions for this match.";
+    if (window.confirm(msg)) {
+      setUsedIds(new Set());
+      setActive(null);
+      setCardView("score");
+      setIsTimerRunning(false);
+      setTimeLeft(TIMER_DURATION);
+      setHasReboundAttempted(false);
+      setAttemptedTeamIndices([]);
+      setActiveClue(null);
+      setFeedback(null);
+      
+      const initialScores = showTeams.map(t => (initialTeamScores && initialTeamScores[t.id]) || 0);
+      setTeamScores(initialScores);
+
+      const initialClueCount = game.cluesPerTeam ?? 2;
+      setClueUsage(Array(showTeams.length).fill(null).map(() => ({ remaining: initialClueCount, usedTypes: [] })));
+
+      if (isRemoteMode) {
+        updateSession({
+          activeQuestionId: null,
+          activeCategoryId: null,
+          isAnswerRevealed: false,
+          cardView: "score",
+          attemptedTeamIndices: [],
+          feedback: null,
+          revealAnswerInFeedback: false,
+          usedQuestionIds: [],
+          teamScores: initialTeamScores || {}
+        });
+      }
+    }
+  };
+
+  const handleReturnToMainMenuClick = () => {
+    const msg = lang === "es"
+      ? "¿Seguro que quieres guardar el progreso y volver al menú principal?"
+      : "Are you sure you want to save progress and return to the main menu?";
+    if (window.confirm(msg)) {
+      const earnedPoints: Record<string, number> = {};
+      showTeams.forEach((t, idx) => {
+        const initial = (initialTeamScores && initialTeamScores[t.id]) || 0;
+        earnedPoints[t.id] = teamScores[idx] - initial;
+      });
+      if (onReturnToMainMenu) {
+        onReturnToMainMenu(earnedPoints);
+      } else {
+        onExit(earnedPoints);
+      }
     }
   };
 
@@ -574,7 +654,34 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
       setCardView("answer");
     }
     else if (type === "feedback_continue") handleFeedbackContinue();
-  }, [sessionData?.hostCommand, isRemoteMode]);
+    else if (type === "restart_game") {
+      setUsedIds(new Set());
+      setActive(null);
+      setCardView("score");
+      setIsTimerRunning(false);
+      setTimeLeft(TIMER_DURATION);
+      setHasReboundAttempted(false);
+      setAttemptedTeamIndices([]);
+      setActiveClue(null);
+      setFeedback(null);
+      const initialScores = showTeams.map(t => (initialTeamScores && initialTeamScores[t.id]) || 0);
+      setTeamScores(initialScores);
+      const initialClueCount = game.cluesPerTeam ?? 2;
+      setClueUsage(Array(showTeams.length).fill(null).map(() => ({ remaining: initialClueCount, usedTypes: [] })));
+    }
+    else if (type === "return_to_menu") {
+      const earnedPoints: Record<string, number> = {};
+      showTeams.forEach((t, idx) => {
+        const initial = (initialTeamScores && initialTeamScores[t.id]) || 0;
+        earnedPoints[t.id] = teamScores[idx] - initial;
+      });
+      if (onReturnToMainMenu) {
+        onReturnToMainMenu(earnedPoints);
+      } else {
+        onExit(earnedPoints);
+      }
+    }
+  }, [sessionData?.hostCommand, isRemoteMode, showTeams, initialTeamScores, teamScores, onReturnToMainMenu, onExit]);
 
   // Sync state to Firebase remote session on changes (only from PC host)
   useEffect(() => {
@@ -590,6 +697,15 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
       });
     }
   }, [isViewer, isRemoteMode, cardView, showAnswer, currentTeamIndex, hasReboundAttempted, revealAnswerInFeedback, attemptedTeamIndices, feedback]);
+
+  // Play correct/wrong sound when feedback is shown (works on both Host and TV view)
+  useEffect(() => {
+    if (feedback === "correct") {
+      correctSound.play();
+    } else if (feedback === "wrong") {
+      wrongSound.play();
+    }
+  }, [feedback]);
 
   // ── Timer ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -671,7 +787,8 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
         cardView: "score",
         attemptedTeamIndices: [],
         feedback: null,
-        revealAnswerInFeedback: false
+        revealAnswerInFeedback: false,
+        hasReboundAttempted: false
       });
     }
   };
@@ -683,7 +800,6 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     const { closeAfter = true, onComplete, revealAnswer = false } = options || {};
     setFeedback(type);
     setRevealAnswerInFeedback(revealAnswer);
-    if (type === "correct") correctSound.play(); else wrongSound.play();
 
     // Save completion callback to run when Host clicks "Continue"
     feedbackCallbackRef.current = () => {
@@ -793,6 +909,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
 
     if (reboundsAllowed && nextAttempted.length < totalTeamsCount) {
       setAttemptedTeamIndices(nextAttempted);
+      setHasReboundAttempted(true);
       const nextTeam = getNextReboundTeam(failingTeam, nextAttempted);
       setCurrentTeamIndex(nextTeam);
       setIsTimerRunning(false);
@@ -915,13 +1032,20 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
         }
         return;
       }
-      if (e.key === "r" || e.key === "R") { e.preventDefault(); handleCorrect(); }
-      if (e.key === "w" || e.key === "W") { e.preventDefault(); handleWrong(); }
       if (e.key === " ") { e.preventDefault(); setIsTimerRunning(v => !v); }
+      if (!showAnswer) {
+        if (e.key === "r" || e.key === "R") { e.preventDefault(); handleCorrect(); }
+        if (e.key === "w" || e.key === "W") { e.preventDefault(); handleWrong(); }
+      } else {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          clearQuestionState();
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, currentTeamIndex, isViewer, feedback]);
+  }, [active, currentTeamIndex, isViewer, feedback, showAnswer]);
 
   // ── TV RENDER: board always visible, overlay on top ───────────────────────
   if (isViewer) {
@@ -1009,12 +1133,12 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
             cardView={cardView}
             currentTeamIndex={currentTeamIndex}
             teamScores={teamScores}
-            teamLabels={[teamLabel(0), teamLabel(1)]}
+            teamLabels={teamLabels}
             timeLeft={timeLeft}
             activeClue={activeClue}
             hasReboundAttempted={hasReboundAttempted}
           />
-          <FeedbackOverlay type={feedback} correctAnswer={revealAnswerInFeedback ? active?.question.correctAnswer : undefined} points={active?.question.points} />
+          <FeedbackOverlay type={feedback} correctAnswer={revealAnswerInFeedback ? active?.question.correctAnswer : undefined} points={active?.question.points} isRebound={hasReboundAttempted && !revealAnswerInFeedback} />
         </main>
       </div>
     );
@@ -1048,9 +1172,27 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
               </div>
             ))}
           </div>
-          <button onClick={handleExitClick} className="bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg">
-            Exit Game
-          </button>
+          <div className="flex items-center gap-3">
+            {onReturnToMainMenu && (
+              <button
+                onClick={handleReturnToMainMenuClick}
+                className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold px-4 py-2 rounded-lg flex items-center gap-2 border border-slate-600"
+              >
+                <LogOut size={16} />
+                {lang === "es" ? "Menú Principal" : "Return to Menu"}
+              </button>
+            )}
+            <button
+              onClick={handleRestartClick}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold px-4 py-2 rounded-lg flex items-center gap-2"
+            >
+              <RotateCcw size={16} />
+              {lang === "es" ? "Reiniciar" : "Restart"}
+            </button>
+            <button onClick={handleExitClick} className="bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg">
+              Exit Game
+            </button>
+          </div>
         </div>
       </header>
 
@@ -1148,17 +1290,17 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                 <div className="w-full h-full flex items-center justify-center bg-white rounded-lg">
                   <img src={CARD_BACK_IMG} alt="Logo" className="max-w-xs" />
                 </div>
-              ) : active.question.questionMediaUrl && active.question.questionMediaType ? (
+              ) : active.question.questionMediaUrl && activeQuestionMediaType ? (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full h-full min-h-0">
                   {/* Left Column: Media (7 cols) */}
                   <div className="lg:col-span-7 bg-slate-800 rounded-xl p-4 flex justify-center items-center h-full max-h-[60vh] overflow-hidden">
-                    {active.question.questionMediaType === "IMAGE" && (
+                    {activeQuestionMediaType === "IMAGE" && (
                       <img src={resolveMediaUrl(active.question.questionMediaUrl)} alt="Question media" className="max-w-full max-h-full rounded shadow-lg object-contain" />
                     )}
-                    {active.question.questionMediaType === "AUDIO" && (
+                    {activeQuestionMediaType === "AUDIO" && (
                       <audio controls autoPlay src={resolveMediaUrl(active.question.questionMediaUrl)} className="w-full max-w-lg" />
                     )}
-                    {active.question.questionMediaType === "VIDEO" && (
+                    {activeQuestionMediaType === "VIDEO" && (
                       <video controls autoPlay src={resolveMediaUrl(active.question.questionMediaUrl)} className="max-w-full max-h-full rounded shadow-lg object-contain" />
                     )}
                   </div>
@@ -1244,12 +1386,16 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
             <footer className="relative flex flex-col gap-3 pt-4 shrink-0">
               <div className="flex flex-wrap justify-end items-center gap-3">
                 <div className="flex flex-col mr-auto gap-2">
-                  <span className="text-sm text-slate-400">Hotkeys: R = Correct, W = Wrong, Space = Start/Pause timer</span>
+                  <span className="text-sm text-slate-400">
+                    {showAnswer
+                      ? "Hotkeys: Enter = Next (Return to Grid), Space = Start/Pause timer"
+                      : "Hotkeys: R = Correct, W = Wrong, Space = Start/Pause timer"}
+                  </span>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-slate-200">{teamLabel(currentTeamIndex)} clues left: {clueUsage[currentTeamIndex]?.remaining ?? 0}</span>
                     <button
                       onClick={() => setShowClueMenu(v => !v)}
-                      disabled={(clueUsage[currentTeamIndex]?.remaining ?? 0) <= 0}
+                      disabled={showAnswer || (clueUsage[currentTeamIndex]?.remaining ?? 0) <= 0}
                       className="px-3 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Use clue
@@ -1265,17 +1411,11 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                   </button>
                 ) : showAnswer ? (
                   <>
-                    <button onClick={() => handleWrong()} className="px-6 py-3 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-500 text-lg">
-                      Wrong (W)
-                    </button>
                     <button
                       onClick={clearQuestionState}
                       className="px-8 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 text-xl shadow-lg ring-4 ring-blue-400 animate-pulse"
                     >
                       Next (Return to Grid)
-                    </button>
-                    <button onClick={handleCorrect} className="px-6 py-3 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 text-lg">
-                      Correct (R)
                     </button>
                   </>
                 ) : (
