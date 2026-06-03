@@ -31,7 +31,11 @@ const TeamIcon: React.FC<TeamIconProps> = ({ iconName, className = "w-6 h-6", st
             <img 
                 src={`/images/${capitalized}.png`} 
                 className={className} 
-                style={{ ...style, objectFit: 'contain' }} 
+                style={{ 
+                    ...style, 
+                    objectFit: 'contain',
+                    transform: style?.transform ? `${style.transform} scale(1.3)` : 'scale(1.3)'
+                }} 
                 alt={`${iconName} Team Icon`} 
             />
         );

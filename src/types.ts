@@ -330,6 +330,7 @@ export interface ShowMediaItem {
   size: "small" | "medium" | "large";
   placement: "lobby" | "header" | "footer" | "credits" | "sidebar" | "commercial";
   screen: "tv" | "host" | "both";
+  tier?: "platinum" | "gold" | "silver" | "bronze" | "partner" | "supporter";
 }
 
 export interface ShowSettings {

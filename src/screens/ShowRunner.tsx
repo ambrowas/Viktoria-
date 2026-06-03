@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Game, Show, Team } from "@/types";
+import type { Game, Show, Team, ShowMediaItem } from "@/types";
 import GameRouter from "./GameRouter";
 import { useSync } from "@/context/SyncContext";
-import { Trophy, Users, Play, Pause, ChevronRight, Home, LayoutList, FastForward } from "lucide-react";
+import { Trophy, Users, Play, Pause, ChevronRight, Home, LayoutList, FastForward, Clapperboard } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useLanguage } from "@/context/LanguageContext";
 import { stopAllSounds } from "@/utils/sound";
 import MasterControlPanel from "./host/MasterControlPanel";
 import SessionLobby from "@/components/SessionLobby";
 import TeamIcon from "@/components/TeamIcon";
+import { resolveMediaUrl } from "@/utils/media";
 
 interface ShowRunnerProps {
     show: Show;
@@ -19,7 +20,7 @@ interface ShowRunnerProps {
     isViewer?: boolean;
 }
 
-type ShowStep = "intro" | "lobby" | "announcement" | "playing" | "leaderboard" | "final_results";
+type ShowStep = "intro" | "lobby" | "announcement" | "playing" | "leaderboard" | "final_results" | "commercial";
 
 const TRANSLATIONS = {
     en: {
@@ -46,6 +47,96 @@ const MUSIC_PATHS = {
     countdown: "/sounds/phantasticbeats-afro-countdown-109083.mp3"
 };
 
+const SponsorLogosGrid: React.FC<{ sponsors: ShowMediaItem[] }> = ({ sponsors }) => {
+    if (sponsors.length === 0) return null;
+    return (
+        <div className="flex flex-wrap items-center justify-center gap-6 py-1 px-4 bg-slate-900/40 backdrop-blur border border-white/5 rounded-2xl max-w-full">
+            {sponsors.map(s => {
+                let sizeClass = "h-8";
+                if (s.size === "medium") sizeClass = "h-12";
+                if (s.size === "large") sizeClass = "h-16";
+                
+                return (
+                    <div key={s.id} className="flex items-center justify-center hover:scale-105 transition-transform" title={s.name}>
+                        {s.url ? (
+                            <img 
+                                src={resolveMediaUrl(s.url)} 
+                                alt={s.name || "Sponsor"} 
+                                className={`${sizeClass} w-auto object-contain max-w-[200px] filter brightness-100 hover:brightness-110 transition-all`} 
+                            />
+                        ) : (
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{s.name}</span>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+const CommercialSlideshow: React.FC<{ assets: ShowMediaItem[] }> = ({ assets }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+
+    useEffect(() => {
+        if (assets.length <= 1) return;
+        const interval = setInterval(() => {
+            setCurrentIndex((prev) => (prev + 1) % assets.length);
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [assets.length]);
+
+    if (assets.length === 0) {
+        return (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-black text-white p-8 text-center">
+                <h2 className="text-3xl font-black mb-4 uppercase text-yellow-500">PAUSA COMERCIAL</h2>
+                <p className="text-slate-400">Publicidad y Patrocinadores del Evento</p>
+            </div>
+        );
+    }
+
+    const currentAsset = assets[currentIndex];
+
+    return (
+        <div className="w-full h-full relative bg-black flex items-center justify-center overflow-hidden">
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={currentAsset.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.05 }}
+                    transition={{ duration: 0.8 }}
+                    className="absolute inset-0 flex items-center justify-center p-12"
+                >
+                    {currentAsset.url ? (
+                        <img
+                            src={resolveMediaUrl(currentAsset.url)}
+                            alt={currentAsset.name || "Commercial Break"}
+                            className="max-w-full max-h-full object-contain rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/5"
+                        />
+                    ) : (
+                        <div className="text-center">
+                            <h2 className="text-4xl font-black mb-2 uppercase text-yellow-500">{currentAsset.name || "Commercial Break"}</h2>
+                        </div>
+                    )}
+                </motion.div>
+            </AnimatePresence>
+            
+            {assets.length > 1 && (
+                <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-2 z-10">
+                    {assets.map((_, idx) => (
+                        <div
+                            key={idx}
+                            className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                                idx === currentIndex ? "bg-yellow-500 scale-125" : "bg-white/20"
+                            }`}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialState, isViewer = false }) => {
     const { lang: globalLang } = useLanguage();
     const lang = show.settings.language || (globalLang as "en" | "es");
@@ -70,6 +161,83 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
 
     // TV-side mirror of participants (populated via BroadcastChannel)
     const [viewerParticipants, setViewerParticipants] = useState<typeof participants>([]);
+
+    const [previousStep, setPreviousStep] = useState<ShowStep>(initialState?.step || "lobby");
+
+    const headerSponsors = useMemo(() => {
+        if (!show.sponsors) return [];
+        return show.sponsors.filter(s => 
+            s.placement === 'header' && 
+            (isViewer ? (s.screen === 'tv' || s.screen === 'both') : (s.screen === 'host' || s.screen === 'both'))
+        );
+    }, [show.sponsors, isViewer]);
+
+    const footerSponsors = useMemo(() => {
+        if (!show.sponsors) return [];
+        return show.sponsors.filter(s => 
+            s.placement === 'footer' && 
+            (isViewer ? (s.screen === 'tv' || s.screen === 'both') : (s.screen === 'host' || s.screen === 'both'))
+        );
+    }, [show.sponsors, isViewer]);
+
+    const sidebarSponsors = useMemo(() => {
+        if (!show.sponsors) return [];
+        return show.sponsors.filter(s => 
+            s.placement === 'sidebar' && 
+            (isViewer ? (s.screen === 'tv' || s.screen === 'both') : (s.screen === 'host' || s.screen === 'both'))
+        );
+    }, [show.sponsors, isViewer]);
+
+    const creditsSponsors = useMemo(() => {
+        if (!show.sponsors) return [];
+        return show.sponsors.filter(s => 
+            s.placement === 'credits' && 
+            (isViewer ? (s.screen === 'tv' || s.screen === 'both') : (s.screen === 'host' || s.screen === 'both'))
+        );
+    }, [show.sponsors, isViewer]);
+
+    const commercialAssets = useMemo(() => {
+        if (!show.assets) return [];
+        return show.assets.filter(a =>
+            a.placement === 'commercial' &&
+            (isViewer ? (a.screen === 'tv' || a.screen === 'both') : (a.screen === 'host' || a.screen === 'both'))
+        );
+    }, [show.assets, isViewer]);
+
+    // Preload image assets to cache
+    useEffect(() => {
+        const imagesToPreload: string[] = [];
+        if (show.themeImage) {
+            imagesToPreload.push(show.themeImage);
+        }
+        if (show.sponsors) {
+            show.sponsors.forEach(s => {
+                if (s.url) imagesToPreload.push(s.url);
+            });
+        }
+        if (show.assets) {
+            show.assets.forEach(a => {
+                if (a.url) imagesToPreload.push(a.url);
+            });
+        }
+
+        console.log(`ShowRunner: Preloading ${imagesToPreload.length} image assets in background...`);
+        imagesToPreload.forEach(url => {
+            const img = new Image();
+            img.src = url;
+        });
+    }, [show]);
+
+    const toggleCommercialBreak = () => {
+        setStep(prev => {
+            if (prev === "commercial") {
+                return previousStep;
+            } else {
+                setPreviousStep(prev);
+                return "commercial";
+            }
+        });
+    };
 
     // ── BroadcastChannel: PC → TV show state sync ────────────────────────────
     const latestShowState = React.useRef({ step, currentRoundIndex, currentGameIndex, teamScores, countdown, participants });
@@ -403,22 +571,62 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
         return (
             <div className="flex flex-col h-screen overflow-hidden bg-black">
                 {hostControl === 'manual' && !isViewer && <MasterControlPanel />}
-                <div className="flex-1 relative">
-                    <GameRouter
-                        game={currentGame}
-                        teams={show.teams}
-                        teamScores={teamScores}
-                        onScoreChange={(teamId, score) => {
-                            setTeamScores((prev) => ({ ...prev, [teamId]: (prev[teamId] || 0) + score }));
-                        }}
-                        language={show.settings.language}
-                        hostControl={hostControl}
-                        playerControl={playerControl}
-                        isViewer={isViewer}
-                        onExit={(points) => handleFinishGame(points)}
-                        onReturnToMainMenu={handleSaveAndExitMidGame}
-                    />
+                
+                {headerSponsors.length > 0 && (
+                    <div className="bg-[#050505] px-6 py-2 border-b border-white/5 flex items-center justify-center shrink-0">
+                        <SponsorLogosGrid sponsors={headerSponsors} />
+                    </div>
+                )}
+                
+                <div className="flex-1 relative flex flex-row overflow-hidden">
+                    {sidebarSponsors.length > 0 && (
+                        <div className="bg-[#050505] w-28 p-4 border-r border-white/5 flex flex-col items-center justify-start gap-6 shrink-0">
+                            <SponsorLogosGrid sponsors={sidebarSponsors} />
+                        </div>
+                    )}
+                    <div className="flex-1 relative">
+                        <GameRouter
+                            game={currentGame}
+                            teams={show.teams}
+                            teamScores={teamScores}
+                            onScoreChange={(teamId, score) => {
+                                setTeamScores((prev) => ({ ...prev, [teamId]: (prev[teamId] || 0) + score }));
+                            }}
+                            language={show.settings.language}
+                            hostControl={hostControl}
+                            playerControl={playerControl}
+                            isViewer={isViewer}
+                            onExit={(points) => handleFinishGame(points)}
+                            onReturnToMainMenu={handleSaveAndExitMidGame}
+                        />
+                    </div>
                 </div>
+
+                {footerSponsors.length > 0 && (
+                    <div className="bg-[#050505] px-6 py-2 border-t border-white/5 flex items-center justify-center shrink-0">
+                        <SponsorLogosGrid sponsors={footerSponsors} />
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    if (step === "commercial") {
+        return (
+            <div className="fixed inset-0 bg-black text-white z-50 flex flex-col">
+                <div className="flex-1">
+                    <CommercialSlideshow assets={commercialAssets} />
+                </div>
+                {!isViewer && (
+                    <div className="absolute top-4 right-4 z-[60]">
+                        <button
+                            onClick={toggleCommercialBreak}
+                            className="bg-red-600 hover:bg-red-500 text-white font-black px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 transition-all active:scale-95 text-sm uppercase tracking-wider"
+                        >
+                            <Home size={16} /> Volver al Show (Exit Commercials)
+                        </button>
+                    </div>
+                )}
             </div>
         );
     }
@@ -522,6 +730,8 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
                             location={show.settings.location}
                             onFadeOutMusic={() => fadeOutIntro(() => {})}
                             isMusicPlaying={isMusicPlaying}
+                            themeImage={show.themeImage}
+                            sponsors={show.sponsors}
                         />
                     </motion.div>
                 )}
@@ -623,8 +833,68 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
                                     </motion.div>
                                 ))}
                         </div>
+
+                        {step === "final_results" && (
+                            <div className="mt-12 border-t border-white/10 pt-10 space-y-10 max-w-4xl mx-auto text-center pb-20 overflow-y-auto max-h-[40vh] no-scrollbar">
+                                {show.settings.winnerTitle && (
+                                    <div className="space-y-1">
+                                        <h3 className="text-base font-bold text-yellow-500 uppercase tracking-widest">Ceremonia de Premiación</h3>
+                                        <p className="text-3xl font-black">{show.settings.winnerTitle}</p>
+                                    </div>
+                                )}
+                                
+                                {show.settings.thankYouMessage && (
+                                    <div className="space-y-1">
+                                        <p className="text-base text-slate-300 italic">"{show.settings.thankYouMessage}"</p>
+                                    </div>
+                                )}
+
+                                {/* Production Team Credits */}
+                                {show.settings.organizers && show.settings.organizers.length > 0 && (
+                                    <div className="space-y-3">
+                                        <h4 className="text-[10px] text-slate-500 uppercase font-bold tracking-[0.2em]">Equipo de Organización</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                            {show.settings.organizers.map(o => (
+                                                <div key={o.id} className="bg-white/5 p-3 rounded-xl border border-white/5">
+                                                    <p className="text-yellow-500 font-bold text-xs uppercase">{o.role || "Organizador"}</p>
+                                                    <p className="text-white text-base font-black">{o.name}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Credits Sponsors */}
+                                {creditsSponsors.length > 0 && (
+                                    <div className="space-y-3">
+                                        <h4 className="text-[10px] text-slate-500 uppercase font-bold tracking-[0.2em]">Con el Apoyo y Colaboración de</h4>
+                                        <div className="flex flex-wrap items-center justify-center gap-6 bg-white/5 p-5 rounded-2xl border border-white/5">
+                                            {creditsSponsors.map(s => {
+                                                let sizeClass = "h-10";
+                                                if (s.size === "small") sizeClass = "h-7";
+                                                if (s.size === "large") sizeClass = "h-14";
+                                                return (
+                                                    <div key={s.id} className="hover:scale-105 transition-transform" title={s.name}>
+                                                        {s.url ? (
+                                                            <img 
+                                                                src={resolveMediaUrl(s.url)} 
+                                                                alt={s.name} 
+                                                                className={`${sizeClass} w-auto object-contain max-w-[180px] filter brightness-100 hover:brightness-110 transition-all`} 
+                                                            />
+                                                        ) : (
+                                                            <span className="text-sm font-black text-slate-300 uppercase tracking-widest">{s.name}</span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {!isViewer && (
-                            <div className="flex justify-center gap-6">
+                            <div className="flex justify-center gap-6 mt-6">
                                 {step === "final_results" ? (
                                     <button
                                         onClick={() => {
@@ -677,6 +947,17 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
                     GAME {currentGameIndex + 1} / {currentRound.gameIds.length}
                 </div>
             </div>
+
+            {!isViewer && (step as string) !== "commercial" && (step as string) !== "intro" && (
+                <div className="fixed top-4 right-4 z-50">
+                    <button
+                        onClick={toggleCommercialBreak}
+                        className="bg-yellow-500 hover:bg-yellow-400 text-black font-black px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 transition-all active:scale-95 text-xs uppercase tracking-wider border border-yellow-600/30"
+                    >
+                        <Clapperboard size={14} /> Pausa Comercial
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

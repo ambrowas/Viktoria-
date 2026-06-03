@@ -128,7 +128,7 @@ ipcMain.handle("copy-media-file", async (_event, sourcePath: string) => {
     // In dev, we write to the public folder directly so Vite picks it up.
     // In prod, assets are in `dist`, which is a sibling to `dist-electron`.
     const targetDir = isDev
-      ? path.join(app.getAppPath(), "public", "images", "uploads")
+      ? path.join(process.cwd(), "public", "images", "uploads")
       : path.join(__dirname, "..", "dist", "images", "uploads");
 
     // Ensure the target directory exists
@@ -187,7 +187,7 @@ ipcMain.handle("save-data-url", async (_event, dataUrl: string) => {
     const ext = extensionMap[mimeType] || "";
     const isDev = process.env.NODE_ENV === "development";
     const targetDir = isDev
-      ? path.join(app.getAppPath(), "public", "images", "uploads")
+      ? path.join(process.cwd(), "public", "images", "uploads")
       : path.join(__dirname, "..", "dist", "images", "uploads");
 
     if (!fs.existsSync(targetDir)) {

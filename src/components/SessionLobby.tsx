@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSync } from '@/context/SyncContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, UserPlus, Play, QrCode, Monitor, Tablet, Copy, Check, ShieldCheck, MapPin, Volume2, VolumeX, LogOut } from 'lucide-react';
-import { Team } from '@/types';
+import { Team, ShowMediaItem } from '@/types';
 import TeamIcon from '@/components/TeamIcon';
 import { checkInSound } from '@/utils/sound';
 import { useLanguage } from '@/context/LanguageContext';
+import { resolveMediaUrl } from '@/utils/media';
 
 interface SessionLobbyProps {
     teams: Team[];
@@ -17,13 +18,30 @@ interface SessionLobbyProps {
     location?: string;
     onFadeOutMusic?: () => void;
     isMusicPlaying?: boolean;
+    themeImage?: string;
+    sponsors?: ShowMediaItem[];
 }
 
-const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, onBack, hostControl, isViewer = false, overrideParticipants, location, onFadeOutMusic, isMusicPlaying = false }) => {
+const SessionLobby: React.FC<SessionLobbyProps> = ({
+    teams,
+    onStart,
+    onBack,
+    hostControl,
+    isViewer = false,
+    overrideParticipants,
+    location,
+    onFadeOutMusic,
+    isMusicPlaying = false,
+    themeImage,
+    sponsors
+}) => {
     const { lang } = useLanguage();
     console.log("Lobby hostControl:", hostControl);
     const { sessionId, participants: syncParticipants, sessionData, registerParticipant } = useSync();
     const participants = overrideParticipants ?? syncParticipants;
+    const unassignedCount = useMemo(() => {
+        return participants.filter(p => !p.teamId || p.teamId === '').length;
+    }, [participants]);
     const prevCountRef = useRef(participants.length);
     useEffect(() => {
         console.log("Lobby mounted. sessionId:", sessionId);
@@ -50,10 +68,28 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, onBack, hos
         return participants.filter(p => p.teamId === teamId);
     };
 
-    const unassignedCount = participants.filter(p => !p.teamId).length;
+    const lobbySponsors = useMemo(() => {
+        if (!sponsors) return [];
+        return sponsors.filter(s =>
+            s.placement === 'lobby' &&
+            (isViewer ? (s.screen === 'tv' || s.screen === 'both') : (s.screen === 'host' || s.screen === 'both'))
+        );
+    }, [sponsors, isViewer]);
+
+    const lobbyBgStyle = themeImage
+        ? {
+            backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 10, 0.75), rgba(10, 10, 10, 0.95)), url(${resolveMediaUrl(themeImage)})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat'
+          }
+        : {};
 
     return (
-        <div className="flex flex-col h-full bg-[#0a0a0a] text-white p-12 overflow-y-auto scrollbar-hide">
+        <div
+            className="flex flex-col h-full text-white p-12 overflow-y-auto scrollbar-hide bg-[#0a0a0a]"
+            style={lobbyBgStyle}
+        >
             {/* Header */}
             <header className="flex justify-between items-start mb-12">
                 <div>
@@ -251,6 +287,29 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({ teams, onStart, onBack, hos
                     );
                 })}
             </div>
+
+            {/* Lobby Sponsors */}
+            {lobbySponsors && lobbySponsors.length > 0 && (
+                <div className="mt-8 mb-16 flex flex-col items-center justify-center gap-4 bg-slate-950/40 p-6 rounded-[2.5rem] border border-white/5 backdrop-blur-sm max-w-5xl mx-auto w-full">
+                    <p className="text-[10px] text-slate-500 uppercase font-black tracking-[0.2em]">Patrocinadores Oficiales</p>
+                    <div className="flex flex-wrap items-center justify-center gap-8">
+                        {lobbySponsors.map(s => {
+                            let sizeClass = "h-12";
+                            if (s.size === "small") sizeClass = "h-8";
+                            if (s.size === "large") sizeClass = "h-16";
+                            return (
+                                <div key={s.id} className="hover:scale-105 transition-transform" title={s.name}>
+                                    {s.url ? (
+                                        <img src={resolveMediaUrl(s.url)} alt={s.name} className={`${sizeClass} w-auto object-contain max-w-[200px] filter brightness-100 hover:brightness-110 transition-all`} />
+                                    ) : (
+                                        <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">{s.name}</span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Sticky Actions — hidden on TV */}
             {!isViewer && (

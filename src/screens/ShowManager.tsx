@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import type { Game, Player, Show, ShowRound, Team } from "@/types";
+import type { Game, Player, Show, ShowRound, Team, ShowMediaItem, ShowSettings } from "@/types";
 import { GameType } from "@/types";
-import { X, GripVertical, Trash2, Plus, Upload, Image as ImageIcon } from "lucide-react";
+import { X, GripVertical, Trash2, Plus, Upload, Image as ImageIcon, Eye } from "lucide-react";
 import TeamIcon from "@/components/TeamIcon";
+import { resolveMediaUrl } from "@/utils/media";
 
 interface ShowManagerProps {
   shows: Show[];
@@ -43,6 +44,48 @@ const DEFAULT_SETTINGS = {
 };
 
 const uuid = () => crypto.randomUUID();
+
+const compressImageFile = (
+  file: File,
+  maxWidth: number,
+  quality: number,
+  callback: (compressedBase64: string) => void
+) => {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        let compressed = canvas.toDataURL("image/webp", quality);
+        if (compressed.startsWith("data:image/webp")) {
+          callback(compressed);
+        } else {
+          compressed = canvas.toDataURL("image/jpeg", quality);
+          callback(compressed);
+        }
+      } else {
+        callback(e.target?.result as string);
+      }
+    };
+    img.onerror = () => {
+      callback(e.target?.result as string);
+    };
+    img.src = e.target?.result as string;
+  };
+  reader.readAsDataURL(file);
+};
+
 
 const createPlayers = (count: number): Player[] =>
   Array.from({ length: count }, (_, index) => ({
@@ -119,6 +162,12 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [libraryFilter, setLibraryFilter] = useState<"ALL" | GameType>("ALL");
   const [librarySearch, setLibrarySearch] = useState("");
+  const [previewItem, setPreviewItem] = useState<{
+    type: "lobby" | "sponsor" | "asset";
+    title: string;
+    url: string;
+    metadata?: any;
+  } | null>(null);
 
   const selectedShow = useMemo(
     () => shows.find((show) => show.id === selectedShowId),
@@ -844,15 +893,13 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
     </div>
   );
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (path: string) => void) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (path: string) => void, maxWidth = 800) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = reader.result as string;
+    compressImageFile(file, maxWidth, 0.8, async (compressedBase64) => {
       try {
         if (window.electronAPI) {
-          const relativePath = await window.electronAPI.invoke("save-data-url", base64);
+          const relativePath = await window.electronAPI.invoke("save-data-url", compressedBase64);
           if (relativePath) {
             callback(relativePath);
             return;
@@ -861,9 +908,8 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
       } catch (err) {
         console.error("Electron save-data-url failed, using data-url fallback:", err);
       }
-      callback(base64);
-    };
-    reader.readAsDataURL(file);
+      callback(compressedBase64);
+    });
   };
 
   const addSponsor = () => {
@@ -871,9 +917,10 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
       id: uuid(),
       name: "",
       url: "",
-      size: "medium" as const,
+      size: "large" as const,
       placement: "header" as const,
       screen: "both" as const,
+      tier: "platinum" as const,
     };
     setShowDraft(prev => ({
       ...prev,
@@ -969,7 +1016,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => handleFileUpload(e, (path) => setShowDraft({ ...showDraft, themeImage: path }))}
+                  onChange={(e) => handleFileUpload(e, (path) => setShowDraft({ ...showDraft, themeImage: path }), 1200)}
                   className="hidden"
                   id="theme-upload"
                 />
@@ -982,16 +1029,29 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                 </label>
                 {showDraft.themeImage && (
                   <div className="flex items-center gap-2 bg-base-100 p-2 rounded-lg border border-base-300 max-w-[250px]">
-                    {showDraft.themeImage.startsWith("data:") ? (
-                      <div className="w-8 h-8 rounded overflow-hidden flex-shrink-0 bg-base-200">
-                        <img src={showDraft.themeImage} alt="Preview" className="w-full h-full object-cover" />
-                      </div>
-                    ) : (
-                      <ImageIcon size={16} className="text-text-secondary flex-shrink-0" />
-                    )}
+                    <div className="w-8 h-8 rounded overflow-hidden flex-shrink-0 bg-base-200 flex items-center justify-center">
+                      <img 
+                        src={resolveMediaUrl(showDraft.themeImage)} 
+                        alt="Preview" 
+                        className="w-full h-full object-cover" 
+                      />
+                    </div>
                     <span className="text-xs text-text-secondary truncate flex-1">
                       {showDraft.themeImage.startsWith("data:") ? "Custom background uploaded" : showDraft.themeImage}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewItem({
+                        type: "lobby",
+                        title: "Lobby Background Preview",
+                        url: showDraft.themeImage || "",
+                        metadata: { location: showDraft.settings.location }
+                      })}
+                      className="text-brand-primary hover:text-brand-primary/80 p-1 mr-1"
+                      title="Preview lobby background"
+                    >
+                      <Eye size={16} />
+                    </button>
                     <button
                       type="button"
                       onClick={() => setShowDraft({ ...showDraft, themeImage: "" })}
@@ -1032,8 +1092,25 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-slate-500">#{index + 1}</span>
                     {sponsor.url ? (
-                      <div className="w-14 h-14 rounded border border-base-300 overflow-hidden flex items-center justify-center bg-base-200">
-                        <img src={sponsor.url} alt="Sponsor preview" className="max-w-full max-h-full object-contain" />
+                      <div className="relative group w-14 h-14 rounded border border-base-300 overflow-hidden flex items-center justify-center bg-base-200">
+                        <img 
+                          src={resolveMediaUrl(sponsor.url)} 
+                          alt="Sponsor preview" 
+                          className="max-w-full max-h-full object-contain" 
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPreviewItem({
+                            type: "sponsor",
+                            title: `Sponsor Preview: ${sponsor.name || 'Unnamed'}`,
+                            url: sponsor.url || "",
+                            metadata: { placement: sponsor.placement, size: sponsor.size, tier: sponsor.tier, name: sponsor.name }
+                          })}
+                          className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity duration-200"
+                          title="Preview placement"
+                        >
+                          <Eye size={16} />
+                        </button>
                       </div>
                     ) : (
                       <div className="w-14 h-14 rounded border-2 border-dashed border-base-300 flex items-center justify-center text-text-secondary bg-base-200">
@@ -1042,7 +1119,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                     )}
                   </div>
 
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
                     {/* Sponsor Name */}
                     <div>
                       <label className="block text-xs text-text-secondary mb-1 uppercase font-bold">Sponsor Name (Nombre)</label>
@@ -1055,6 +1132,47 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                       />
                     </div>
 
+                    {/* Sponsor Tier */}
+                    <div>
+                      <label className="block text-xs text-text-secondary mb-1 uppercase font-bold">Sponsor Tier (Categoría)</label>
+                      <select
+                        value={sponsor.tier || "platinum"}
+                        onChange={(e) => {
+                          const val = e.target.value as ShowMediaItem["tier"];
+                          let size = sponsor.size;
+                          let placement = sponsor.placement;
+                          if (val === "platinum") {
+                            size = "large";
+                            placement = "header";
+                          } else if (val === "gold") {
+                            size = "medium";
+                            placement = "header";
+                          } else if (val === "silver") {
+                            size = "medium";
+                            placement = "footer";
+                          } else if (val === "bronze") {
+                            size = "small";
+                            placement = "credits";
+                          } else if (val === "partner") {
+                            size = "small";
+                            placement = "footer";
+                          } else if (val === "supporter") {
+                            size = "small";
+                            placement = "credits";
+                          }
+                          updateSponsor(sponsor.id, { tier: val, size, placement });
+                        }}
+                        className="rounded-lg p-2 bg-base-200 border border-base-300 text-xs w-full font-semibold text-text-primary"
+                      >
+                        <option value="platinum">Platinum (Platino)</option>
+                        <option value="gold">Gold (Oro)</option>
+                        <option value="silver">Silver (Plata)</option>
+                        <option value="bronze">Bronze (Bronce)</option>
+                        <option value="partner">Partner (Colaborador)</option>
+                        <option value="supporter">Supporter (Apoyo)</option>
+                      </select>
+                    </div>
+
                     {/* File Upload */}
                     <div className="flex flex-col justify-center">
                       <label className="block text-xs text-text-secondary mb-1 uppercase font-bold">Logo Image</label>
@@ -1062,7 +1180,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                         <input
                           type="file"
                           accept="image/*"
-                          onChange={(e) => handleFileUpload(e, (path) => updateSponsor(sponsor.id, { url: path }))}
+                          onChange={(e) => handleFileUpload(e, (path) => updateSponsor(sponsor.id, { url: path }), 400)}
                           className="hidden"
                           id={`sponsor-${sponsor.id}`}
                         />
@@ -1084,7 +1202,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                       <label className="block text-xs text-text-secondary mb-1 uppercase font-bold">Placement (Ubicación)</label>
                       <select
                         value={sponsor.placement}
-                        onChange={(e) => updateSponsor(sponsor.id, { placement: e.target.value as any })}
+                        onChange={(e) => updateSponsor(sponsor.id, { placement: e.target.value as ShowMediaItem["placement"] })}
                         className="rounded-lg p-2 bg-base-200 border border-base-300 text-xs w-full font-semibold"
                       >
                         <option value="lobby">Lobby (Session Lobby)</option>
@@ -1100,7 +1218,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                       <label className="block text-xs text-text-secondary mb-1 uppercase font-bold">Target Screen (Pantalla)</label>
                       <select
                         value={sponsor.screen}
-                        onChange={(e) => updateSponsor(sponsor.id, { screen: e.target.value as any })}
+                        onChange={(e) => updateSponsor(sponsor.id, { screen: e.target.value as ShowMediaItem["screen"] })}
                         className="rounded-lg p-2 bg-base-200 border border-base-300 text-xs w-full font-semibold"
                       >
                         <option value="tv">TV Screen Only (Público)</option>
@@ -1114,7 +1232,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                       <label className="block text-xs text-text-secondary mb-1 uppercase font-bold">Display Size (Tamaño)</label>
                       <select
                         value={sponsor.size}
-                        onChange={(e) => updateSponsor(sponsor.id, { size: e.target.value as any })}
+                        onChange={(e) => updateSponsor(sponsor.id, { size: e.target.value as ShowMediaItem["size"] })}
                         className="rounded-lg p-2 bg-base-200 border border-base-300 text-xs w-full font-semibold"
                       >
                         <option value="small">Small (Pequeño)</option>
@@ -1166,8 +1284,25 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-slate-500">#{index + 1}</span>
                     {asset.url ? (
-                      <div className="w-14 h-14 rounded border border-base-300 overflow-hidden flex items-center justify-center bg-base-200">
-                        <img src={asset.url} alt="Asset preview" className="max-w-full max-h-full object-contain" />
+                      <div className="relative group w-14 h-14 rounded border border-base-300 overflow-hidden flex items-center justify-center bg-base-200">
+                        <img 
+                          src={resolveMediaUrl(asset.url)} 
+                          alt="Asset preview" 
+                          className="max-w-full max-h-full object-contain" 
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPreviewItem({
+                            type: "asset",
+                            title: `Commercial Asset Preview: ${asset.name || 'Unnamed'}`,
+                            url: asset.url || "",
+                            metadata: { placement: asset.placement, size: asset.size, screen: asset.screen, name: asset.name }
+                          })}
+                          className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity duration-200"
+                          title="Preview slide"
+                        >
+                          <Eye size={16} />
+                        </button>
                       </div>
                     ) : (
                       <div className="w-14 h-14 rounded border-2 border-dashed border-base-300 flex items-center justify-center text-text-secondary bg-base-200">
@@ -1196,7 +1331,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                         <input
                           type="file"
                           accept="image/*"
-                          onChange={(e) => handleFileUpload(e, (path) => updateAsset(asset.id, { url: path }))}
+                          onChange={(e) => handleFileUpload(e, (path) => updateAsset(asset.id, { url: path }), 1200)}
                           className="hidden"
                           id={`asset-${asset.id}`}
                         />
@@ -1458,8 +1593,14 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
             ) : (
               <div className="flex flex-wrap gap-2">
                 { (showDraft.sponsors || []).map(s => (
-                  <span key={s.id} className="px-2.5 py-1 bg-base-100 rounded border border-base-300 text-xs truncate max-w-[200px]" title={s.name || "Sponsor Logo"}>
-                    <strong>{s.name || "Sponsor"}</strong>: {s.url ? "Logo ready" : "No Logo"} ({s.size}) · {s.placement} ({s.screen})
+                  <span key={s.id} className="px-2.5 py-1 bg-base-100 rounded border border-base-300 text-xs truncate max-w-[280px]" title={s.name || "Sponsor Logo"}>
+                    <strong>{s.name || "Sponsor"}</strong>
+                    {s.tier && (
+                      <span className="ml-1.5 px-1 bg-brand-primary/10 text-brand-primary text-[9px] font-black uppercase rounded border border-brand-primary/20">
+                        {s.tier}
+                      </span>
+                    )}
+                    : {s.url ? "Logo ready" : "No Logo"} ({s.size}) · {s.placement} ({s.screen})
                   </span>
                 )) }
               </div>
@@ -1552,6 +1693,260 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
     </aside>
   );
 
+  const renderPreviewModal = () => {
+    if (!previewItem) return null;
+
+    const { type, title, url, metadata } = previewItem;
+    const resolvedUrl = resolveMediaUrl(url);
+
+    return (
+      <div 
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+        onClick={() => setPreviewItem(null)}
+      >
+        <div 
+          className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-900/50">
+            <div>
+              <h3 className="text-lg font-bold text-white uppercase tracking-wider">{title}</h3>
+              <p className="text-xs text-text-secondary mt-0.5">Mockup simulation showing placement on screens</p>
+            </div>
+            <button 
+              onClick={() => setPreviewItem(null)}
+              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="p-8 overflow-y-auto flex-1 flex flex-col items-center justify-center bg-[#0d0e12] space-y-6">
+            
+            {type === "lobby" && (
+              <div className="w-full max-w-2xl flex flex-col gap-3">
+                <span className="text-xs font-bold text-text-secondary uppercase tracking-widest text-center">Session Lobby Mockup</span>
+                <div 
+                  className="aspect-video w-full bg-[#0a0a0a] rounded-xl relative overflow-hidden border border-slate-800 flex flex-col justify-between p-6 text-white shadow-xl"
+                  style={{
+                    backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 10, 0.75), rgba(10, 10, 10, 0.95)), url(${resolvedUrl})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat'
+                  }}
+                >
+                  {/* Top Bar */}
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="text-xs font-black tracking-widest text-yellow-400">SESSION LOBBY</h4>
+                      <p className="text-[9px] text-slate-400">Waiting for players...</p>
+                    </div>
+                    <div className="bg-slate-900/80 border border-slate-800 px-3 py-1 rounded-lg text-right">
+                      <p className="text-[7px] text-slate-500 uppercase tracking-widest">Venue</p>
+                      <p className="text-xs font-bold text-white">{metadata?.location || "Malabo Conference Room A"}</p>
+                    </div>
+                  </div>
+
+                  {/* Team grid */}
+                  <div className="grid grid-cols-4 gap-3 my-4">
+                    {showDraft.teams.slice(0, 4).map((team) => (
+                      <div 
+                        key={`mock-${team.id}`} 
+                        className="bg-slate-900/60 border border-slate-800/40 rounded-xl p-3 flex flex-col items-center justify-center relative overflow-hidden"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center mb-1">
+                          <TeamIcon iconName={team.emoji} className="w-5 h-5" style={{ color: team.color }} />
+                        </div>
+                        <p className="text-[10px] font-black uppercase truncate w-full text-center">{team.name}</p>
+                        <span className="text-[7px] font-bold text-yellow-500 mt-1 uppercase tracking-wider bg-yellow-500/10 px-1 rounded">Ready</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Footer Sponsors */}
+                  <div className="flex justify-between items-end border-t border-white/5 pt-3">
+                    <p className="text-[7px] text-slate-500 uppercase tracking-widest">Powered by Viktoria</p>
+                    <div className="bg-slate-900/90 border border-slate-800 px-2 py-1 rounded text-center">
+                      <p className="text-[9px] font-black text-white">ROOM CODE: 5543</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {type === "sponsor" && (
+              <div className="w-full max-w-2xl flex flex-col gap-6">
+                
+                {/* 1. Original Image View */}
+                <div className="flex flex-col items-center gap-2 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                  <span className="text-xs font-bold text-text-secondary uppercase tracking-widest">Original Logo</span>
+                  <div className="h-28 w-auto flex items-center justify-center p-2 bg-slate-950 rounded-lg border border-slate-800 max-w-xs">
+                    <img src={resolvedUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
+                  </div>
+                  <div className="text-center text-xs text-text-secondary mt-1">
+                    <p><strong>Name:</strong> {metadata?.name || "CYBASTION"}</p>
+                    <p className="capitalize"><strong>Tier:</strong> {metadata?.tier} · <strong>Size:</strong> {metadata?.size} · <strong>Placement:</strong> {metadata?.placement}</p>
+                  </div>
+                </div>
+
+                {/* 2. Simulated Placement Mockup */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-bold text-text-secondary uppercase tracking-widest text-center">Simulated Placement (Pantalla TV)</span>
+                  
+                  {metadata?.placement === "header" && (
+                    <div className="w-full bg-[#0a0a0b] rounded-xl border border-slate-800 overflow-hidden shadow-lg">
+                      {/* Top Header Mockup */}
+                      <div className="bg-[#111] px-4 py-3 border-b border-white/5 flex justify-between items-center">
+                        <span className="text-[10px] font-black text-yellow-400">VIKTORIA TRIVIA SHOW</span>
+                        <div className="bg-slate-950/80 px-4 py-1.5 rounded-lg border border-slate-800 flex items-center gap-2">
+                          <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider">Sponsor:</span>
+                          <img 
+                            src={resolvedUrl} 
+                            alt="Logo" 
+                            className={`object-contain max-w-[120px] ${
+                              metadata.size === "small" ? "h-4" : metadata.size === "medium" ? "h-6" : "h-8"
+                            }`} 
+                          />
+                        </div>
+                      </div>
+                      {/* Simulated Game Arena */}
+                      <div className="aspect-video w-full flex items-center justify-center p-8 bg-slate-900/20 text-center text-xs text-slate-500">
+                        [ Simulated Question Arena / Tablero de Juego ]
+                      </div>
+                    </div>
+                  )}
+
+                  {metadata?.placement === "footer" && (
+                    <div className="w-full bg-[#0a0a0b] rounded-xl border border-slate-800 overflow-hidden shadow-lg">
+                      {/* Simulated Game Arena */}
+                      <div className="aspect-video w-full flex items-center justify-center p-8 bg-slate-900/20 text-center text-xs text-slate-500">
+                        [ Simulated Question Arena / Tablero de Juego ]
+                      </div>
+                      {/* Bottom Footer Mockup */}
+                      <div className="bg-[#111] px-4 py-3 border-t border-white/5 flex justify-between items-center">
+                        <span className="text-[9px] text-slate-400">Round 1 / Pregunta 3</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[8px] text-slate-500 uppercase font-black">Official Sponsor:</span>
+                          <img 
+                            src={resolvedUrl} 
+                            alt="Logo" 
+                            className={`object-contain max-w-[100px] ${
+                              metadata.size === "small" ? "h-4" : metadata.size === "medium" ? "h-6" : "h-8"
+                            }`} 
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {metadata?.placement === "lobby" && (
+                    <div className="w-full bg-[#0a0a0b] rounded-xl border border-slate-800 overflow-hidden shadow-lg p-6 flex flex-col items-center justify-center aspect-video relative">
+                      <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-8">LOBBY SCREEN</h4>
+                      
+                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col items-center gap-2">
+                        <span className="text-[8px] text-slate-500 uppercase font-black tracking-widest">Lobby Sponsor</span>
+                        <img 
+                          src={resolvedUrl} 
+                          alt="Logo" 
+                          className={`object-contain max-w-[160px] ${
+                            metadata.size === "small" ? "h-6" : metadata.size === "medium" ? "h-10" : "h-14"
+                          }`} 
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {metadata?.placement === "sidebar" && (
+                    <div className="w-full bg-[#0a0a0b] rounded-xl border border-slate-800 overflow-hidden shadow-lg flex">
+                      {/* Sidebar Mockup */}
+                      <div className="w-1/4 bg-[#111] p-4 border-r border-white/5 flex flex-col justify-between items-center text-center">
+                        <span className="text-[9px] font-black text-slate-500">SIDEBAR</span>
+                        <div className="w-full bg-slate-950 p-2 rounded border border-slate-800 flex flex-col items-center gap-1">
+                          <span className="text-[7px] text-slate-500 font-bold uppercase">Sponsor</span>
+                          <img 
+                            src={resolvedUrl} 
+                            alt="Logo" 
+                            className={`object-contain max-w-full ${
+                              metadata.size === "small" ? "h-5" : metadata.size === "medium" ? "h-8" : "h-12"
+                            }`} 
+                          />
+                        </div>
+                      </div>
+                      {/* Simulated Game Arena */}
+                      <div className="flex-1 aspect-[4/3] flex items-center justify-center p-8 bg-slate-900/20 text-center text-xs text-slate-500">
+                        [ Question Content ]
+                      </div>
+                    </div>
+                  )}
+
+                  {metadata?.placement === "credits" && (
+                    <div className="w-full bg-[#050507] rounded-xl border border-slate-800 overflow-hidden shadow-lg p-8 flex flex-col items-center justify-center aspect-video text-center select-none text-white">
+                      <div className="space-y-1">
+                        <p className="text-[9px] text-slate-500 uppercase tracking-widest">Produced By</p>
+                        <p className="text-sm font-black">Iniciativas Elebi</p>
+                        <p className="text-[8px] text-slate-500 uppercase tracking-widest mt-4">Ending Credits Sponsors</p>
+                        <div className="flex justify-center mt-2">
+                          <img 
+                            src={resolvedUrl} 
+                            alt="Logo" 
+                            className={`object-contain ${
+                              metadata.size === "small" ? "h-6" : metadata.size === "medium" ? "h-10" : "h-14"
+                            }`} 
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+            )}
+
+            {type === "asset" && (
+              <div className="w-full max-w-2xl flex flex-col gap-3">
+                <span className="text-xs font-bold text-text-secondary uppercase tracking-widest text-center">TV Commercial Break Mockup</span>
+                <div className="aspect-video w-full bg-black rounded-xl relative overflow-hidden border border-slate-800 flex items-center justify-center text-white shadow-xl">
+                  
+                  {/* Top Bar Banner */}
+                  <div className="absolute top-0 left-0 right-0 bg-[#0e0e12]/90 border-b border-white/5 px-4 py-2 flex justify-between items-center z-10 backdrop-blur-sm">
+                    <span className="text-[10px] font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
+                      Pausa Comercial / Commercial Break
+                    </span>
+                    <span className="text-[8px] text-slate-400 font-bold uppercase">{metadata?.name || "Publicidad"}</span>
+                  </div>
+
+                  {/* Asset Image */}
+                  <img src={resolvedUrl} alt="Commercial Asset" className="max-w-full max-h-full object-contain" />
+
+                  {/* Bottom Indicator */}
+                  <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
+                    <div className="w-8 h-1 rounded bg-yellow-500" />
+                    <div className="w-2 h-1 rounded bg-white/20" />
+                    <div className="w-2 h-1 rounded bg-white/20" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 border-t border-slate-800 bg-slate-900/50 flex justify-end">
+            <button
+              onClick={() => setPreviewItem(null)}
+              className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+            >
+              Close Preview
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const stepContent =
     step === 2 ? (
       <DragDropContext onDragEnd={handleDragEnd}>{renderRoundsStep()}</DragDropContext>
@@ -1628,6 +2023,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
           </div>
         </section>
       </div>
+      {renderPreviewModal()}
     </div>
   );
 };
