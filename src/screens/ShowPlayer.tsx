@@ -1,11 +1,12 @@
 import React from "react";
 import type { Game, Show } from "@/types";
+import { useLanguage } from "@/context/LanguageContext";
 
 interface ShowPlayerProps {
   shows: Show[];
   games: Game[];
   onPlayGame: (game: Game) => void;
-  onStartShow: (show: Show) => void;
+  onStartShow: (show: Show, initialState?: any) => void;
   setScreen: (screen: "dashboard" | "library" | "creator" | "shows" | "play") => void;
 }
 
@@ -20,6 +21,8 @@ const findFirstGameInShow = (show: Show, games: Game[]): Game | null => {
 };
 
 const ShowPlayer: React.FC<ShowPlayerProps> = ({ shows, games, onPlayGame, onStartShow, setScreen }) => {
+  const { lang } = useLanguage();
+
   return (
     <div className="p-6 space-y-6">
       <header className="flex items-center justify-between">
@@ -47,6 +50,17 @@ const ShowPlayer: React.FC<ShowPlayerProps> = ({ shows, games, onPlayGame, onSta
             const firstGame = findFirstGameInShow(show, games);
             const totalGames = show.rounds.reduce((acc, round) => acc + round.gameIds.length, 0);
 
+            // Check for saved show state
+            const savedStateStr = window.localStorage.getItem(`viktoria-show-resume-${show.id}`);
+            let savedState = null;
+            if (savedStateStr) {
+              try {
+                savedState = JSON.parse(savedStateStr);
+              } catch (e) {
+                console.error("Failed to parse saved show state", e);
+              }
+            }
+
             return (
               <div
                 key={show.id}
@@ -63,16 +77,26 @@ const ShowPlayer: React.FC<ShowPlayerProps> = ({ shows, games, onPlayGame, onSta
                   <span>{show.settings.totalRounds} rounds</span>
                   <span>{totalGames} games</span>
                 </div>
-                <div className="flex justify-between items-center mt-auto">
-                  <span className="text-xs text-text-secondary">
+                <div className="flex justify-between items-center mt-auto gap-4">
+                  <span className="text-xs text-text-secondary truncate">
                     {firstGame ? `Starts with: ${firstGame.name}` : "No games assigned"}
                   </span>
-                  <button
-                    onClick={() => onStartShow(show)}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-primary text-black hover:bg-brand-secondary"
-                  >
-                    Play Show
-                  </button>
+                  <div className="flex gap-2 flex-shrink-0">
+                    {savedState && (
+                      <button
+                        onClick={() => onStartShow(show, savedState)}
+                        className="px-3 py-2 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                      >
+                        {lang === "es" ? "Continuar Show" : "Continue Show"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => onStartShow(show)}
+                      className="px-3 py-2 rounded-lg text-xs font-semibold bg-brand-primary text-black hover:bg-brand-secondary transition-colors"
+                    >
+                      {lang === "es" ? "Iniciar Show" : "Play Show"}
+                    </button>
+                  </div>
                 </div>
               </div>
             );

@@ -51,11 +51,14 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
     const lang = show.settings.language || (globalLang as "en" | "es");
     const t = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS.en;
 
-    const [step, setStep] = useState<ShowStep>("intro");
-    const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
-    const [currentGameIndex, setCurrentGameIndex] = useState(0);
+    const [step, setStep] = useState<ShowStep>(initialState?.step || "intro");
+    const [currentRoundIndex, setCurrentRoundIndex] = useState(initialState?.currentRoundIndex || 0);
+    const [currentGameIndex, setCurrentGameIndex] = useState(initialState?.currentGameIndex || 0);
     const [countdown, setCountdown] = useState(20);
     const [teamScores, setTeamScores] = useState<Record<string, number>>(() => {
+        if (initialState?.teamScores) {
+            return initialState.teamScores;
+        }
         return Object.fromEntries(show.teams.map((t) => [t.id, 0]));
     });
     const [isMusicPlaying, setIsMusicPlaying] = useState(true);
@@ -236,6 +239,22 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
             });
         }
     }, [step, currentRoundIndex, currentGameIndex, teamScores, isRemoteMode, show.id, updateSession]);
+
+    // Save show progress to localStorage automatically (only on Host side)
+    useEffect(() => {
+        if (isViewer) return;
+        if (step === "final_results") {
+            window.localStorage.removeItem(`viktoria-show-resume-${show.id}`);
+        } else {
+            const saveState = {
+                step,
+                currentRoundIndex,
+                currentGameIndex,
+                teamScores,
+            };
+            window.localStorage.setItem(`viktoria-show-resume-${show.id}`, JSON.stringify(saveState));
+        }
+    }, [step, currentRoundIndex, currentGameIndex, teamScores, isViewer, show.id]);
 
     // 🎬 MISSION 05: Listen for Host Commands
     const lastCommandTimestamp = React.useRef<number>(0);
