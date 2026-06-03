@@ -642,10 +642,11 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
                         exit={{ opacity: 0, scale: 1.1 }}
                         className="text-center"
                     >
-                        <h2 className="text-xl font-bold text-yellow-500 mb-2 uppercase tracking-[0.3em]">Viktoría Presents</h2>
-                        <h1 className="text-8xl font-black mb-8 tracking-tighter bg-gradient-to-r from-yellow-400 to-yellow-600 bg-clip-text text-transparent">
+                        <h2 className="text-xl font-bold text-yellow-500 mb-2 uppercase tracking-[0.3em]">INICIATIVAS ELEBI PRESENTS</h2>
+                        <h1 className="text-8xl font-black mb-2 tracking-tighter bg-gradient-to-r from-yellow-400 to-yellow-600 bg-clip-text text-transparent">
                             {show.name.toUpperCase()}
                         </h1>
+                        <p className="text-xs uppercase tracking-[0.4em] text-slate-500 mb-8">POWERED BY VIKTORIA GAMESHOW ENGINE</p>
                         <div className="flex flex-col items-center gap-6">
                             {!isViewer && (
                                 <button
