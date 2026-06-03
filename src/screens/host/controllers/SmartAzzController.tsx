@@ -23,6 +23,8 @@ const SmartAzzController: React.FC<SmartAzzControllerProps> = ({ game, sessionDa
         winnerScreen: null,
         showCredits: false,
         isDraw: false,
+        guessedBy: {},
+        eliminationReason: null,
     };
 
     const isFinalRound = sessionData?.currentRoundIndex === ((sessionData?.fullShowData?.rounds?.length || 0) - 1);
@@ -54,7 +56,7 @@ const SmartAzzController: React.FC<SmartAzzControllerProps> = ({ game, sessionDa
 
             if (nextShot <= 0) {
                 clearInterval(interval);
-                handleTeamFail(state.activeTeam);
+                handleTeamFail(state.activeTeam, 'timeout');
                 return;
             }
 
@@ -135,7 +137,7 @@ const SmartAzzController: React.FC<SmartAzzControllerProps> = ({ game, sessionDa
         setSearchQuery("");
     };
 
-    const handleTeamFail = (failingTeamIndex: 0 | 1) => {
+    const handleTeamFail = (failingTeamIndex: 0 | 1, reason: 'timeout' | 'wrong') => {
         const winningTeamIndex = failingTeamIndex === 0 ? 1 : 0;
         const newVictories = [...(state.victories || [0, 0])];
         newVictories[winningTeamIndex] += 1;
@@ -145,6 +147,8 @@ const SmartAzzController: React.FC<SmartAzzControllerProps> = ({ game, sessionDa
             isRunning: false,
             roundEnded: true,
             isDraw: false,
+            eliminationReason: reason,
+            activeTeam: failingTeamIndex,
         });
     };
 
@@ -429,7 +433,8 @@ const SmartAzzController: React.FC<SmartAzzControllerProps> = ({ game, sessionDa
                         )}
                     </div>
                     <div className="flex-1 overflow-auto grid grid-cols-2 gap-2 pr-1">
-                        {answersList
+                        {[...answersList]
+                            .sort((a, b) => a.localeCompare(b))
                             .filter((ans: string) => ans.toLowerCase().includes(searchQuery.toLowerCase()))
                             .map((ans: string, i: number) => {
                                 const isGuessed = (state.guessedAnswers || []).includes(ans);
@@ -499,30 +504,12 @@ const SmartAzzController: React.FC<SmartAzzControllerProps> = ({ game, sessionDa
             {/* Bottom Actions Bar */}
             <div className="bg-slate-900/60 border border-white/5 p-3 rounded-2xl flex gap-3">
                 {!state.roundEnded ? (
-                    <>
-                        <button
-                            onClick={() => handleTeamFail(state.activeTeam)}
-                            className="flex-1 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md border"
-                            style={{
-                                backgroundColor: `${activeTeams[state.activeTeam]?.color || (state.activeTeam === 0 ? '#22c55e' : '#3b82f6')}15`,
-                                borderColor: `${activeTeams[state.activeTeam]?.color || (state.activeTeam === 0 ? '#22c55e' : '#3b82f6')}40`,
-                                color: activeTeams[state.activeTeam]?.color || (state.activeTeam === 0 ? '#22c55e' : '#3b82f6'),
-                            }}
-                        >
-                            <X size={16} /> WRONG / TIME OUT ({teamLabel(state.activeTeam)})
-                        </button>
-                        <button
-                            onClick={() => handleTeamFail(state.activeTeam === 0 ? 1 : 0)}
-                            className="flex-1 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md border"
-                            style={{
-                                backgroundColor: `${activeTeams[state.activeTeam === 0 ? 1 : 0]?.color || (state.activeTeam === 0 ? '#3b82f6' : '#22c55e')}15`,
-                                borderColor: `${activeTeams[state.activeTeam === 0 ? 1 : 0]?.color || (state.activeTeam === 0 ? '#3b82f6' : '#22c55e')}40`,
-                                color: activeTeams[state.activeTeam === 0 ? 1 : 0]?.color || (state.activeTeam === 0 ? '#3b82f6' : '#22c55e'),
-                            }}
-                        >
-                            <X size={16} /> WRONG / TIME OUT ({teamLabel(state.activeTeam === 0 ? 1 : 0)})
-                        </button>
-                    </>
+                    <button
+                        onClick={() => handleTeamFail(state.activeTeam, 'wrong')}
+                        className="w-full py-5 rounded-xl bg-red-650 hover:bg-red-550 text-white font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md border border-red-500/20"
+                    >
+                        <X size={18} strokeWidth={3} /> NOT IN THE LIST ({teamLabel(state.activeTeam)})
+                    </button>
                 ) : (
                     <div className="flex flex-col gap-2 w-full">
                         <button

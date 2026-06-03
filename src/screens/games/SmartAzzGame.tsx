@@ -5,6 +5,7 @@ import { useSync } from "@/context/SyncContext";
 import { resolveMediaUrl } from '@/utils/media';
 import { useLanguage } from '@/context/LanguageContext';
 import confetti from 'canvas-confetti';
+import { X } from 'lucide-react';
 
 // 🗓️ Single digit split-flap component
 const FlipDigit: React.FC<{ digit: string }> = ({ digit }) => {
@@ -99,6 +100,7 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
   const [winnerScreen, setWinnerScreen] = useState<string | null>(null);
   const [showCredits, setShowCredits] = useState(false);
   const [earlyEndWinnerIndex, setEarlyEndWinnerIndex] = useState<number | null>(null);
+  const [eliminationReason, setEliminationReason] = useState<'timeout' | 'wrong' | null>(null);
 
   const themeMusicRef = useRef<HTMLAudioElement | null>(null);
 
@@ -135,6 +137,7 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
     isDraw?: boolean;
     guessedBy?: Record<string, number>;
     earlyEndWinnerIndex?: number | null;
+    eliminationReason?: 'timeout' | 'wrong' | null;
   }) => {
     if (updates.activeCategoryId !== undefined) {
       const cat = game.categories.find(c => c.id === updates.activeCategoryId) || null;
@@ -153,6 +156,7 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
     if (updates.isDraw !== undefined) setIsDraw(updates.isDraw);
     if (updates.guessedBy !== undefined) setGuessedBy(updates.guessedBy);
     if (updates.earlyEndWinnerIndex !== undefined) setEarlyEndWinnerIndex(updates.earlyEndWinnerIndex);
+    if (updates.eliminationReason !== undefined) setEliminationReason(updates.eliminationReason);
 
     if (isSyncActive && isHost) {
       const fullState = {
@@ -171,6 +175,7 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
         isDraw: updates.isDraw !== undefined ? updates.isDraw : isDraw,
         guessedBy: updates.guessedBy !== undefined ? updates.guessedBy : guessedBy,
         earlyEndWinnerIndex: updates.earlyEndWinnerIndex !== undefined ? updates.earlyEndWinnerIndex : earlyEndWinnerIndex,
+        eliminationReason: updates.eliminationReason !== undefined ? updates.eliminationReason : eliminationReason,
       };
       updateSession({ smartAzzState: fullState }).catch(err => {
         console.error("SmartAzz: Failed to sync state", err);
@@ -219,6 +224,7 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
     setIsDraw(state.isDraw || false);
     setGuessedBy(state.guessedBy || {});
     setEarlyEndWinnerIndex(state.earlyEndWinnerIndex !== undefined ? state.earlyEndWinnerIndex : null);
+    setEliminationReason(state.eliminationReason || null);
   }, [sessionData?.smartAzzState, isSyncActive, isViewer, game.categories]);
 
   // Host/Offline timer execution
@@ -237,7 +243,7 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
 
       if (nextShot <= 0) {
         clearInterval(timerRef.current!);
-        handleTeamFail(activeTeam);
+        handleTeamFail(activeTeam, 'timeout');
         return;
       }
 
@@ -267,7 +273,7 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
       
       // Catastrophic sound on elimination (only if not a draw)
       if (roundEnded && !prevRoundEndedRef.current && !isDraw) {
-        const audio = new Audio('/sounds/failure.mp3');
+        const audio = new Audio('/sounds/wrong.mp3');
         audio.play().catch(() => {});
       }
     }
@@ -333,7 +339,7 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
     }
   }
 
-  function handleTeamFail(failingTeamIndex: 0 | 1) {
+  function handleTeamFail(failingTeamIndex: 0 | 1, reason: 'timeout' | 'wrong') {
     const winningTeamIndex = failingTeamIndex === 0 ? 1 : 0;
     const newVictories = [...victories] as [number, number];
     newVictories[winningTeamIndex] += 1;
@@ -343,6 +349,8 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
       isRunning: false,
       roundEnded: true,
       isDraw: false,
+      eliminationReason: reason,
+      activeTeam: failingTeamIndex,
     });
   }
 
@@ -797,11 +805,11 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
 
               <div className="flex gap-12 items-center justify-center mb-8 w-full max-w-5xl">
                 {/* Team A Side */}
-                <div className={`flex flex-col items-center transition-all ${activeTeam === 0 ? 'scale-110 opacity-100' : 'scale-90 opacity-40'}`}>
+                <div className={`flex flex-col items-center transition-all ${activeTeam === 0 ? 'scale-110 opacity-100' : 'scale-90 opacity-40'} w-1/3`}>
                   <h3 className="text-3xl font-bold mb-4" style={{ color: teams?.[0]?.color || '#22c55e' }}>{teamLabel(0)}</h3>
                   {!isViewer && (
                     <button
-                      onClick={() => handleTeamFail(0)}
+                      onClick={() => handleTeamFail(0, 'wrong')}
                       className="border-2 px-6 py-3 rounded-xl font-bold transition-colors shadow-lg active:scale-95 bg-white/5 hover:bg-white/10"
                       style={{
                         borderColor: teams?.[0]?.color || '#22c55e',
@@ -811,10 +819,31 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
                       Eliminated
                     </button>
                   )}
+                  {/* Team A Guessed Answers List */}
+                  <div className="flex flex-col gap-2.5 w-full max-w-xs mt-6 overflow-y-auto max-h-[35vh] pr-1">
+                    {guessedAnswers
+                      .filter(ans => guessedBy[ans] === 0)
+                      .map((ans, i) => (
+                        <motion.div
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          key={i}
+                          className="font-bold px-4 py-2.5 rounded-xl text-center border text-sm uppercase tracking-wide shadow-md"
+                          style={{
+                            backgroundColor: `${teams?.[0]?.color || '#22c55e'}15`,
+                            borderColor: teams?.[0]?.color || '#22c55e',
+                            color: teams?.[0]?.color || '#22c55e',
+                            boxShadow: `0 0 10px ${(teams?.[0]?.color || '#22c55e')}25`,
+                          }}
+                        >
+                          {ans}
+                        </motion.div>
+                      ))}
+                  </div>
                 </div>
 
                 {/* Timers or Next Button */}
-                <div className="relative z-10 min-w-[220px] flex flex-col items-center">
+                <div className="relative z-10 min-w-[220px] flex flex-col items-center self-start pt-4">
                   {!roundEnded ? (
                     <>
                       {/* 3D Spin Container when turn changes */}
@@ -867,11 +896,11 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
                 </div>
 
                 {/* Team B Side */}
-                <div className={`flex flex-col items-center transition-all ${activeTeam === 1 ? 'scale-110 opacity-100' : 'scale-90 opacity-40'}`}>
+                <div className={`flex flex-col items-center transition-all ${activeTeam === 1 ? 'scale-110 opacity-100' : 'scale-90 opacity-40'} w-1/3`}>
                   <h3 className="text-3xl font-bold mb-4" style={{ color: teams?.[1]?.color || '#3b82f6' }}>{teamLabel(1)}</h3>
                   {!isViewer && (
                     <button
-                      onClick={() => handleTeamFail(1)}
+                      onClick={() => handleTeamFail(1, 'wrong')}
                       className="border-2 px-6 py-3 rounded-xl font-bold transition-colors shadow-lg active:scale-95 bg-white/5 hover:bg-white/10"
                       style={{
                         borderColor: teams?.[1]?.color || '#3b82f6',
@@ -881,42 +910,73 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
                       Eliminated
                     </button>
                   )}
+                  {/* Team B Guessed Answers List */}
+                  <div className="flex flex-col gap-2.5 w-full max-w-xs mt-6 overflow-y-auto max-h-[35vh] pr-1">
+                    {guessedAnswers
+                      .filter(ans => guessedBy[ans] === 1)
+                      .map((ans, i) => (
+                        <motion.div
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          key={i}
+                          className="font-bold px-4 py-2.5 rounded-xl text-center border text-sm uppercase tracking-wide shadow-md"
+                          style={{
+                            backgroundColor: `${teams?.[1]?.color || '#3b82f6'}15`,
+                            borderColor: teams?.[1]?.color || '#3b82f6',
+                            color: teams?.[1]?.color || '#3b82f6',
+                            boxShadow: `0 0 10px ${(teams?.[1]?.color || '#3b82f6')}25`,
+                          }}
+                        >
+                          {ans}
+                        </motion.div>
+                      ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Guessed Answers Display */}
-              <div className="w-full max-w-4xl flex-1 bg-slate-800/30 border border-slate-700 rounded-xl p-6 overflow-y-auto">
-                <h3 className="text-2xl font-bold text-white mb-4 text-center">Correct Answers</h3>
-                <div className="flex flex-wrap justify-center gap-3">
-                  {guessedAnswers.map((ans, i) => {
-                    const guessingTeamIdx = guessedBy[ans];
-                    const defaultColor = guessingTeamIdx === 0 ? '#22c55e' : guessingTeamIdx === 1 ? '#3b82f6' : '#fbbf24';
-                    const teamColor = guessingTeamIdx !== undefined && teams?.[guessingTeamIdx]?.color 
-                      ? teams[guessingTeamIdx].color 
-                      : defaultColor;
-                    
-                    return (
-                      <motion.div
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        key={i}
-                        className="font-black px-5 py-2 rounded-xl text-lg border"
-                        style={{
-                          backgroundColor: `${teamColor}15`,
-                          borderColor: teamColor,
-                          color: teamColor,
-                          boxShadow: `0 0 15px ${teamColor}30`,
-                        }}
-                      >
-                        {ans}
-                      </motion.div>
-                    );
-                  })}
-                  {guessedAnswers.length === 0 && (
-                    <div className="text-slate-500 italic mt-8">No answers guessed yet.</div>
+              {/* Elimination Overlay */}
+              {roundEnded && !isDraw && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-[#050505]/95 backdrop-blur-md flex flex-col items-center justify-center text-center p-8 z-30"
+                >
+                  <motion.div
+                    initial={{ scale: 0.3, rotate: -30 }}
+                    animate={{ scale: 1.1, rotate: 0 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 10 }}
+                    className="w-36 h-36 bg-red-500/10 rounded-full flex items-center justify-center border-4 border-red-500 mb-8 shadow-[0_0_50px_rgba(239,68,68,0.4)]"
+                  >
+                    <X size={72} className="text-red-500 font-bold" strokeWidth={4.5} />
+                  </motion.div>
+
+                  <h1 className="text-6xl md:text-8xl font-black text-red-500 uppercase tracking-tighter mb-4 drop-shadow-[0_0_30px_rgba(239,68,68,0.5)]">
+                    {eliminationReason === 'timeout' 
+                      ? (lang === 'es' ? "TIEMPO AGOTADO" : "TIME IS UP") 
+                      : (lang === 'es' ? "INCORRECTO" : "INCORRECT")}
+                  </h1>
+
+                  <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-wider mb-8">
+                    {teamLabel(activeTeam)} {lang === 'es' ? "ELIMINADO" : "ELIMINATED"}
+                  </h2>
+
+                  {activeCategory.explanation && (
+                    <p className="text-lg md:text-2xl text-slate-300 max-w-3xl italic leading-relaxed bg-white/5 border border-white/10 p-6 rounded-2xl mb-8">
+                      {activeCategory.explanation}
+                    </p>
                   )}
-                </div>
-              </div>
+
+                  {!isViewer && (
+                    <button
+                      onClick={checkWinnerAndContinue}
+                      className="bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xl px-12 py-4 rounded-full shadow-[0_0_30px_rgba(252,211,77,0.4)] transition-all transform hover:scale-105 active:scale-95"
+                    >
+                      {lang === 'es' ? 'CONTINUAR ➔' : 'CONTINUE ➔'}
+                    </button>
+                  )}
+                </motion.div>
+              )}
 
               {/* Host Control Panel Overlay */}
               {showHostPanel && !isViewer && (
@@ -944,7 +1004,8 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
                     <button onClick={() => setShowHostPanel(false)} className="text-slate-400 hover:text-white font-bold">Close</button>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 overflow-y-auto pr-2 pb-4">
-                    {(activeCategory.validAnswers || [])
+                    {([...(activeCategory.validAnswers || [])])
+                      .sort((a, b) => a.localeCompare(b))
                       .filter(ans => ans.toLowerCase().includes(hostSearchQuery.toLowerCase()))
                       .map((ans, i) => {
                       const isGuessed = guessedAnswers.includes(ans);
