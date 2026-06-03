@@ -84,7 +84,7 @@ const AfricaDayLandingPage: React.FC<AfricaDayLandingPageProps> = ({
                 settings: {
                     language: "en",
                     organizers: [
-                        { role: "Host and Game Director", name: "The Master Host" }
+                        { role: "Host and Game Director", name: "Macire Aribot Ashford" }
                     ],
                     thankYouMessage: "THANK YOU FOR PLAYING!"
                 },
@@ -96,7 +96,7 @@ const AfricaDayLandingPage: React.FC<AfricaDayLandingPageProps> = ({
             settings: {
                 language: rawShow.settings?.language || "en",
                 organizers: rawShow.settings?.organizers || [
-                    { role: "Host and Game Director", name: "The Master Host" }
+                    { role: "Host and Game Director", name: "Macire Aribot Ashford" }
                 ],
                 thankYouMessage: rawShow.settings?.thankYouMessage || "THANK YOU FOR PLAYING!"
             },
@@ -285,12 +285,16 @@ const AfricaDayLandingPage: React.FC<AfricaDayLandingPageProps> = ({
                                     onClick={handleHostClick}
                                     className="flex flex-col items-center gap-2.5 group cursor-pointer active:scale-95 transition-transform border border-transparent focus:outline-none"
                                 >
-                                    {/* Photo Icon Placeholder */}
-                                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#14213d] to-black flex items-center justify-center border border-[#fca311]/35 shadow-inner group-hover:border-[#fca311] transition-all">
-                                        <Crown size={40} className="text-[#fca311]" />
+                                    {/* Photo Icon Placeholder / Actual Photo */}
+                                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#14213d] to-black flex items-center justify-center border border-[#fca311]/35 shadow-inner overflow-hidden group-hover:border-[#fca311] transition-all">
+                                        <img 
+                                            src={resolveMediaUrl("images/macire.webp")} 
+                                            alt="Macire Aribot Ashford" 
+                                            className="w-full h-full object-cover"
+                                        />
                                     </div>
-                                    <span className="text-sm font-black uppercase tracking-wider text-white group-hover:text-[#fca311] transition-all">
-                                        THE MASTER HOST
+                                    <span className="text-sm font-black uppercase tracking-wider text-white group-hover:text-[#fca311] transition-all text-center">
+                                        Macire Aribot Ashford
                                     </span>
                                 </button>
                             </div>
@@ -305,7 +309,7 @@ const AfricaDayLandingPage: React.FC<AfricaDayLandingPageProps> = ({
                                         { name: "MELVIN FOOTE", initials: "MF", color: "from-amber-600 to-amber-800", photo: "Melvin_Foote.jpg" },
                                         { name: "YAO GUEVARA", initials: "YG", color: "from-[#6b211f] to-[#b83227]", photo: "Yao_Guevara.jpg" },
                                         { name: "VIVIENNE SEQUEIRA", initials: "VS", color: "from-[#18392b] to-[#2e644c]", photo: "Vivienne_Sequeira.jpeg" },
-                                        { name: "BIBIANA INE-RYAN", initials: "BI", color: "from-amber-700 to-amber-900" }
+                                        { name: "BIANNA INE-RYAN", initials: "BI", color: "from-amber-700 to-amber-900", photo: "biana.png" }
                                     ].map((judge) => {
                                         const isActiveJudge = isUnlocked && unlockedElderName === judge.name;
                                         return (

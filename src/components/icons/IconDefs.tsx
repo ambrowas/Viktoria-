@@ -8,7 +8,8 @@ import {
   Target,
   Music,
   Gamepad2,
-  Trophy
+  Trophy,
+  Printer
 } from "lucide-react";
 
 export const CrownIcon = Crown;
@@ -21,6 +22,7 @@ export const TargetIcon = Target;
 export const MusicIcon = Music;
 export const GamepadIcon = Gamepad2;
 export const TrophyIcon = Trophy;
+export const PrinterIcon = Printer;
 
 interface IconProps {
   className?: string;

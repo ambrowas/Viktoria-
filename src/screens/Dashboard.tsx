@@ -1,6 +1,7 @@
 // src/screens/Dashboard.tsx
 import React from "react";
-import type { Game, Screen, Show } from "@/types";
+import { GameType } from "@/types";
+import type { Game, Screen, Show, QuizBoardGame } from "@/types";
 import {
   GameIcon,
   LibraryIcon,
@@ -108,14 +109,16 @@ const Dashboard: React.FC<DashboardProps> = ({
   // 📊 Compute total questions dynamically
   const totalQuestions = games.reduce((acc, game) => {
     switch (game.type) {
-      case "JEOPARDY":
+      case GameType.QUIZBOARD: {
+        const qg = game as QuizBoardGame;
         return (
           acc +
-          (game.categories?.reduce(
-            (cAcc, category) => cAcc + (category.questions?.length || 0),
+          (qg.categories?.reduce(
+            (cAcc: number, category: any) => cAcc + (category.questions?.length || 0),
             0
           ) || 0)
         );
+      }
       case "FAMILY_FEUD":
         return acc + (game.rounds?.length || 0);
       default:

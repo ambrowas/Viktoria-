@@ -3,7 +3,7 @@ import {
   Game,
   GameType,
   ChainReactionGame,
-  JeopardyGame,
+  QuizBoardGame,
   FamilyFeudGame,
   MemoryGame,
   HangmanGame,
@@ -25,6 +25,7 @@ export const storage = undefined as any;
 function normalizeType(raw: any): GameType {
   const upper = String(raw ?? "").toUpperCase();
   if (upper === "TRIVIA") return GameType.CHAIN_REACTION;
+  if (upper === "JEOPARDY") return GameType.QUIZBOARD; // Map legacy type
   const values = Object.values(GameType);
   return values.includes(upper as GameType)
     ? (upper as GameType)
@@ -59,12 +60,12 @@ export function coerceGame(raw: any, idFromDoc?: string): Game {
     }
 
     // -----------------------------
-    // Jeopardy
+    // QuizBoard
     // -----------------------------
-    case GameType.JEOPARDY: {
-      const g: JeopardyGame = {
+    case GameType.QUIZBOARD: {
+      const g: QuizBoardGame = {
         ...base,
-        type: GameType.JEOPARDY,
+        type: GameType.QUIZBOARD,
         categories: Array.isArray(raw?.categories) ? raw.categories : [],
       };
       return g;
@@ -177,8 +178,9 @@ export function coerceGame(raw: any, idFromDoc?: string): Game {
       const g: LotteryGame = {
         ...base,
         type: GameType.LOTTERY,
+        mode: raw?.mode ?? "TRADITIONAL",
         tickets: Array.isArray(raw?.tickets) ? raw.tickets : [],
-        draws: Array.isArray(raw?.draws) ? raw.draws : [],
+        draw: raw?.draw ?? null,
       };
       return g;
     }

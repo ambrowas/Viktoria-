@@ -337,6 +337,9 @@ const App: React.FC = () => {
               if (!localGames.some((g) => g.id === id)) {
                 const lg = raw as Game;
                 lg.id = id;
+                if (lg.type === ("JEOPARDY" as any)) {
+                  lg.type = "QUIZBOARD" as any;
+                }
                 lg.slug = lg.slug || lg.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "") || id;
                 await saveGame(lg);
                 migratedAny = true;
@@ -421,6 +424,10 @@ const App: React.FC = () => {
   const handleSaveGame = useCallback(
     async (gameToSave: Game, silent?: boolean): Promise<void> => {
       try {
+        // Delete any existing game directory with the same ID first to prevent duplication
+        if (gameToSave.id) {
+          await deleteGame({ id: gameToSave.id });
+        }
         const success = await saveGame(gameToSave);
         if (success) {
           await fetchGames(); // Refresh the list from the source of truth

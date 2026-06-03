@@ -19,7 +19,15 @@ export async function getGames(): Promise<Game[]> {
     }
     // The main process reads all individual game files and returns them as an array.
     const games = await window.electronAPI.invoke("list-games-local");
-    return Array.isArray(games) ? games : [];
+    if (Array.isArray(games)) {
+      return games.map((game: any) => {
+        if (game.type === "JEOPARDY") {
+          return { ...game, type: "QUIZBOARD" };
+        }
+        return game;
+      });
+    }
+    return [];
   } catch (error) {
     console.error("❌ Failed to invoke 'list-games-local' via IPC:", error);
     return [];

@@ -1,6 +1,6 @@
 import type {
   ChainQuestion,
-  JeopardyQuestion,
+  QuizBoardQuestion,
   FamilyFeudRound,
   ChainRound,
   PyramidQuestion,
@@ -213,31 +213,31 @@ export const generateMemoryIcons = async (
   }
 };
 
-// 💡 Jeopardy
-export const generateJeopardyCategory = async (
+// 💡 QuizBoard
+export const generateQuizBoardCategory = async (
   topic: string,
   difficulty: string,
   language: "en" | "es" = "en"
-): Promise<ServiceResponse<{ name: string; questions: Omit<JeopardyQuestion, "id">[] }>> => {
+): Promise<ServiceResponse<{ name: string; questions: Omit<QuizBoardQuestion, "id">[] }>> => {
   const modelError = await checkModel();
   if (modelError) return { data: null, error: modelError };
 
   const prompt =
     language === "es"
-      ? `Genera una categoría de Jeopardy sobre "${topic}". Devuelve solo JSON.`
-      : `Generate a Jeopardy category about "${topic}". Return JSON only.`;
+      ? `Genera una categoría de QuizBoard (tablero de preguntas y respuestas) sobre "${topic}". La categoría debe contener 5 preguntas con puntuaciones de 100, 200, 300, 400 y 500. Devuelve solo JSON con la estructura: { "name": "Nombre de la Categoría", "questions": [{ "question": "Pregunta", "correctAnswer": "Respuesta correcta", "points": 100, "type": "DIRECT", "options": ["", "", ""] }] }`
+      : `Generate a QuizBoard category (trivia board game category) about "${topic}". The category should contain 5 questions with points 100, 200, 300, 400, and 500. Return JSON only with structure: { "name": "Category Name", "questions": [{ "question": "Question text", "correctAnswer": "Answer text", "points": 100, "type": "DIRECT", "options": ["", "", ""] }] }`;
 
   try {
     const res = await model.generateContent(prompt);
     const text = await extractText(res);
     const result = safeJson<any>(text);
     if (!result || !result.name || !Array.isArray(result.questions)) {
-      return { data: null, error: "Invalid Jeopardy data structure from AI." };
+      return { data: null, error: "Invalid QuizBoard data structure from AI." };
     }
     return { data: result, error: null };
   } catch (err) {
-    console.error("❌ [generateJeopardyCategory] Failed:", err);
-    return { data: null, error: "Failed to generate Jeopardy category." };
+    console.error("❌ [generateQuizBoardCategory] Failed:", err);
+    return { data: null, error: "Failed to generate QuizBoard category." };
   }
 };
 
@@ -589,5 +589,39 @@ export async function generateRoscoBulk(
   } catch (err) {
     console.error("❌ [generateRoscoBulk] Failed:", err);
     return { data: null, error: "Failed to generate Rosco clues with Gemini." };
+  }
+}
+
+// 🧠 SmartAzz (Face Off) Answers
+export async function generateSmartAzzAnswers(
+  categoryName: string,
+  count = 15,
+  language: "en" | "es" = "es"
+): Promise<ServiceResponse<string[]>> {
+  const modelError = await checkModel();
+  if (modelError) return { data: null, error: modelError };
+
+  const prompt =
+    language === "es"
+      ? `Genera una lista de hasta ${count} respuestas válidas o conceptos aceptables para la categoría: "${categoryName}". 
+      Devuelve SOLO un arreglo JSON de cadenas. Ejemplo: ["Respuesta 1", "Respuesta 2"]`
+      : `Generate a list of up to ${count} valid answers or acceptable concepts for the category: "${categoryName}". 
+      Return ONLY a JSON array of strings. Example: ["Answer 1", "Answer 2"]`;
+
+  try {
+    const res = await model.generateContent(prompt);
+    const text = await extractText(res);
+    const parsed = safeJson<string[]>(text);
+
+    if (!parsed || !Array.isArray(parsed)) {
+      return { data: null, error: "AI failed to generate a valid list of answers. The response was malformed." };
+    }
+
+    // Clean and normalize answers
+    const data = parsed.map(item => String(item).trim()).filter(Boolean);
+    return { data, error: null };
+  } catch (err) {
+    console.error("❌ [generateSmartAzzAnswers] Failed:", err);
+    return { data: null, error: err instanceof Error ? err.message : "An unknown error occurred during generation." };
   }
 }

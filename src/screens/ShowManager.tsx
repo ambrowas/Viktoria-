@@ -918,7 +918,7 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
       name: "",
       url: "",
       size: "large" as const,
-      placement: "header" as const,
+      placement: "header_center" as const,
       screen: "both" as const,
       tier: "platinum" as const,
     };
@@ -1143,19 +1143,19 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                           let placement = sponsor.placement;
                           if (val === "platinum") {
                             size = "large";
-                            placement = "header";
+                            placement = "header_center";
                           } else if (val === "gold") {
                             size = "medium";
-                            placement = "header";
+                            placement = "header_left";
                           } else if (val === "silver") {
                             size = "medium";
-                            placement = "footer";
+                            placement = "header_right";
                           } else if (val === "bronze") {
                             size = "small";
                             placement = "credits";
                           } else if (val === "partner") {
                             size = "small";
-                            placement = "footer";
+                            placement = "header_left";
                           } else if (val === "supporter") {
                             size = "small";
                             placement = "credits";
@@ -1206,8 +1206,9 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                         className="rounded-lg p-2 bg-base-200 border border-base-300 text-xs w-full font-semibold"
                       >
                         <option value="lobby">Lobby (Session Lobby)</option>
-                        <option value="header">Top Header (Cabecera)</option>
-                        <option value="footer">Bottom Footer (Pie de página)</option>
+                        <option value="header_left">Header Left (Cabecera Izquierda)</option>
+                        <option value="header_center">Header Center (Cabecera Centro)</option>
+                        <option value="header_right">Header Right (Cabecera Derecha)</option>
                         <option value="sidebar">Sidebar (Barra Lateral)</option>
                         <option value="credits">Ending Credits (Créditos Finales)</option>
                       </select>
@@ -1795,18 +1796,25 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                 <div className="flex flex-col gap-2">
                   <span className="text-xs font-bold text-text-secondary uppercase tracking-widest text-center">Simulated Placement (Pantalla TV)</span>
                   
-                  {metadata?.placement === "header" && (
+                  {(metadata?.placement === "header" || metadata?.placement === "header_left" || metadata?.placement === "header_center" || metadata?.placement === "header_right") && (
                     <div className="w-full bg-[#0a0a0b] rounded-xl border border-slate-800 overflow-hidden shadow-lg">
                       {/* Top Header Mockup */}
                       <div className="bg-[#111] px-4 py-3 border-b border-white/5 flex justify-between items-center">
                         <span className="text-[10px] font-black text-yellow-400">VIKTORIA TRIVIA SHOW</span>
                         <div className="bg-slate-950/80 px-4 py-1.5 rounded-lg border border-slate-800 flex items-center gap-2">
-                          <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider">Sponsor:</span>
+                          <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider">
+                            {metadata.placement === "header_left" && "Header Left"}
+                            {metadata.placement === "header_center" && "Header Center (Platinum)"}
+                            {metadata.placement === "header_right" && "Header Right"}
+                            {metadata.placement === "header" && "Header"} Sponsor:
+                          </span>
                           <img 
                             src={resolvedUrl} 
                             alt="Logo" 
-                            className={`object-contain max-w-[120px] ${
-                              metadata.size === "small" ? "h-4" : metadata.size === "medium" ? "h-6" : "h-8"
+                            className={`object-contain ${
+                              metadata.placement === "header_center" && metadata.size === "large"
+                                ? "h-12 max-w-[180px]"
+                                : metadata.size === "small" ? "h-4 max-w-[80px]" : metadata.size === "medium" ? "h-6 max-w-[120px]" : "h-8 max-w-[140px]"
                             }`} 
                           />
                         </div>
@@ -1814,29 +1822,6 @@ const ShowManager: React.FC<ShowManagerProps> = ({ shows, games, onSaveShow, onD
                       {/* Simulated Game Arena */}
                       <div className="aspect-video w-full flex items-center justify-center p-8 bg-slate-900/20 text-center text-xs text-slate-500">
                         [ Simulated Question Arena / Tablero de Juego ]
-                      </div>
-                    </div>
-                  )}
-
-                  {metadata?.placement === "footer" && (
-                    <div className="w-full bg-[#0a0a0b] rounded-xl border border-slate-800 overflow-hidden shadow-lg">
-                      {/* Simulated Game Arena */}
-                      <div className="aspect-video w-full flex items-center justify-center p-8 bg-slate-900/20 text-center text-xs text-slate-500">
-                        [ Simulated Question Arena / Tablero de Juego ]
-                      </div>
-                      {/* Bottom Footer Mockup */}
-                      <div className="bg-[#111] px-4 py-3 border-t border-white/5 flex justify-between items-center">
-                        <span className="text-[9px] text-slate-400">Round 1 / Pregunta 3</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[8px] text-slate-500 uppercase font-black">Official Sponsor:</span>
-                          <img 
-                            src={resolvedUrl} 
-                            alt="Logo" 
-                            className={`object-contain max-w-[100px] ${
-                              metadata.size === "small" ? "h-4" : metadata.size === "medium" ? "h-6" : "h-8"
-                            }`} 
-                          />
-                        </div>
                       </div>
                     </div>
                   )}

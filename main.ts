@@ -123,13 +123,8 @@ ipcMain.handle("copy-media-file", async (_event, sourcePath: string) => {
   }
 
   try {
-    // Define the destination for our uploads
-    const isDev = process.env.NODE_ENV === "development";
-    // In dev, we write to the public folder directly so Vite picks it up.
-    // In prod, assets are in `dist`, which is a sibling to `dist-electron`.
-    const targetDir = isDev
-      ? path.join(process.cwd(), "public", "images", "uploads")
-      : path.join(__dirname, "..", "dist", "images", "uploads");
+    // Define the destination for our uploads in userData directory (always writeable)
+    const targetDir = path.join(app.getPath("userData"), "uploads");
 
     // Ensure the target directory exists
     if (!fs.existsSync(targetDir)) {
@@ -185,10 +180,7 @@ ipcMain.handle("save-data-url", async (_event, dataUrl: string) => {
     };
 
     const ext = extensionMap[mimeType] || "";
-    const isDev = process.env.NODE_ENV === "development";
-    const targetDir = isDev
-      ? path.join(process.cwd(), "public", "images", "uploads")
-      : path.join(__dirname, "..", "dist", "images", "uploads");
+    const targetDir = path.join(app.getPath("userData"), "uploads");
 
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
@@ -206,6 +198,10 @@ ipcMain.handle("save-data-url", async (_event, dataUrl: string) => {
     console.error("Error saving data URI:", error);
     return null;
   }
+});
+
+ipcMain.on("get-user-data-path", (event) => {
+  event.returnValue = app.getPath("userData");
 });
 
 const slugToDir = (slug: string) =>
@@ -401,6 +397,32 @@ ipcMain.on("message", (event, data) => {
 ----------------------------- */
 
 app.whenReady().then(() => {
+  // Copy default/existing uploads to userData/uploads so they are all in one place
+  try {
+    const isDev = process.env.NODE_ENV === "development" || !fs.existsSync(path.join(__dirname, "../dist/index.html"));
+    const sourceUploadsDir = isDev
+      ? path.join(__dirname, "..", "public", "images", "uploads")
+      : path.join(__dirname, "..", "dist", "images", "uploads");
+    const targetUploadsDir = path.join(app.getPath("userData"), "uploads");
+
+    if (fs.existsSync(sourceUploadsDir)) {
+      if (!fs.existsSync(targetUploadsDir)) {
+        fs.mkdirSync(targetUploadsDir, { recursive: true });
+      }
+      const files = fs.readdirSync(sourceUploadsDir);
+      for (const file of files) {
+        const srcFile = path.join(sourceUploadsDir, file);
+        const destFile = path.join(targetUploadsDir, file);
+        if (!fs.existsSync(destFile) && fs.statSync(srcFile).isFile()) {
+          fs.copyFileSync(srcFile, destFile);
+          console.log(`Initialized default upload: ${file}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Failed to copy default uploads to userData directory:", err);
+  }
+
   createWindow();
 
   app.on("activate", () => {

@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import {
   Game,
   GameType,
-  JeopardyGame,
+  QuizBoardGame,
   FamilyFeudGame,
-  JeopardyCategory,
+  QuizBoardCategory,
   MemoryGame,
   HangmanGame,
   RoscoGame,
@@ -15,7 +15,7 @@ import {
   PriceIsRightGame,
   WheelOfFortuneGame,
   LotteryGame,
-  JeopardyTurnMode,
+  QuizBoardTurnMode,
 } from "@/types";
 
 import { motion } from "framer-motion";
@@ -25,13 +25,13 @@ import { useLanguage } from "@/context/LanguageContext";
 // import { ref, uploadString, getDownloadURL } from "firebase/storage";
 // import { storage } from "@/utils/firebase";
 import {
-  generateJeopardyCategory,
+  generateQuizBoardCategory,
   generatePyramidQuestions,
 } from "../services/geminiService";
 
 // Editors
 import ChainReactionEditor from "@/screens/editors/ChainReactionEditor";
-import JeopardyEditor from "./editors/JeopardyEditor";
+import QuizBoardEditor from "./editors/QuizBoardEditor";
 import FamilyFeudEditor from "./editors/FamilyFeudEditor";
 import MemoryEditor from "./editors/MemoryEditor";
 import HangmanEditor from "./editors/HangmanEditor";
@@ -112,7 +112,7 @@ const GameCreator: React.FC<GameCreatorProps> = ({
       case GameType.PYRAMID:
         setGame({ ...base, type, metadata: { questions: [] } });
         break;
-      case GameType.JEOPARDY:
+      case GameType.QUIZBOARD:
         setGame({ ...base, type, categories: [] });
         break;
       case GameType.FAMILY_FEUD:
@@ -192,8 +192,8 @@ const GameCreator: React.FC<GameCreatorProps> = ({
       return null; // signal we could not persist
     };
 
-    if (currentGame.type === GameType.JEOPARDY) {
-      const game = currentGame as JeopardyGame;
+    if (currentGame.type === GameType.QUIZBOARD) {
+      const game = currentGame as QuizBoardGame;
       const categories = await Promise.all(
         (game.categories || []).map(async (cat) => {
           const questions = await Promise.all(
@@ -281,7 +281,7 @@ const GameCreator: React.FC<GameCreatorProps> = ({
 
       const id = game.id || crypto.randomUUID();
       const createdAt = game.createdAt || new Date().toISOString();
-      const slug = game.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "") || id;
+      const slug = game.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "") || game.slug || id;
 
       const rawToSave = { ...(mediaSafeGame || game), id, createdAt, slug, type: (mediaSafeGame || game)?.type };
       const gameToSave = sanitizeForFirestore(rawToSave);
@@ -303,13 +303,13 @@ const GameCreator: React.FC<GameCreatorProps> = ({
   // ============================
   // AI Generators
   // ============================
-  const handleGenerateJeopardyCategory = async () => {
+  const handleGenerateQuizBoardCategory = async () => {
     if (!aiTopic.trim()) return setError("Please enter a topic.");
-    if (game?.type !== GameType.JEOPARDY) return;
+    if (game?.type !== GameType.QUIZBOARD) return;
     setIsGenerating(true);
 
     try {
-      const response = await generateJeopardyCategory(aiTopic, aiDifficulty);
+      const response = await generateQuizBoardCategory(aiTopic, aiDifficulty);
 
       if (response.error) {
         throw new Error(response.error);
@@ -318,15 +318,15 @@ const GameCreator: React.FC<GameCreatorProps> = ({
       const { name, questions } = response.data || { name: "", questions: [] };
       if (!questions.length) throw new Error("No category generated.");
 
-      const newCategory: JeopardyCategory = {
+      const newCategory: QuizBoardCategory = {
         id: crypto.randomUUID(),
         name: name || aiTopic,
         questions: questions.map((q) => ({ ...q, id: crypto.randomUUID() })),
       };
-      const current = (game as JeopardyGame).categories || [];
+      const current = (game as QuizBoardGame).categories || [];
       setGame({
         ...game,
-        type: GameType.JEOPARDY,
+        type: GameType.QUIZBOARD,
         categories: [...current, newCategory],
       });
       setAiTopic("");
@@ -372,8 +372,8 @@ const GameCreator: React.FC<GameCreatorProps> = ({
     switch (game.type) {
       case GameType.CHAIN_REACTION:
         return <ChainReactionEditor game={game as ChainReactionGame} setGame={setGame} />;
-      case GameType.JEOPARDY:
-        return <JeopardyEditor game={game as JeopardyGame} setGame={setGame} />;
+      case GameType.QUIZBOARD:
+        return <QuizBoardEditor game={game as QuizBoardGame} setGame={setGame} />;
       case GameType.FAMILY_FEUD:
         return <FamilyFeudEditor game={game as FamilyFeudGame} setGame={setGame} />;
       case GameType.MEMORY:
@@ -467,7 +467,7 @@ const GameTypeSelector: React.FC<GameTypeSelectorProps> = ({
     { type: GameType.MEMORY, label: "Memory" },
     { type: GameType.HANGMAN, label: "Hangman" },
     { type: GameType.ROSCO, label: "Rosco" },
-    { type: GameType.JEOPARDY, label: "Jeopardy" },
+    { type: GameType.QUIZBOARD, label: "QuizBoard" },
     { type: GameType.CHAIN_REACTION, label: "Chain Reaction" },
     { type: GameType.FAMILY_FEUD, label: "Family Feud" },
     { type: GameType.PYRAMID, label: "Pyramid" },

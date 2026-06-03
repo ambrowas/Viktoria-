@@ -10,6 +10,7 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
     onMessage: (channel, callback) => {
         electron_1.ipcRenderer.on(channel, (_event, data) => callback(_event, data));
     },
+    userDataPath: electron_1.ipcRenderer.sendSync("get-user-data-path"),
     // 🎵 Safe sound player with fallback
     playSound: (filename) => {
         try {

@@ -1,6 +1,7 @@
 import React from "react";
 import * as Icons from "./icons/IconDefs";
 import { User } from "lucide-react";
+import { resolveMediaUrl } from "@/utils/media";
 
 interface TeamIconProps {
     iconName?: string;
@@ -29,7 +30,7 @@ const TeamIcon: React.FC<TeamIconProps> = ({ iconName, className = "w-6 h-6", st
         const capitalized = iconName.charAt(0).toUpperCase() + iconName.slice(1);
         return (
             <img 
-                src={`/images/${capitalized}.png`} 
+                src={resolveMediaUrl(`images/${capitalized}.png`)} 
                 className={className} 
                 style={{ 
                     ...style, 

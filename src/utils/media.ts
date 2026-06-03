@@ -18,6 +18,9 @@ export const resolveMediaUrl = (url?: string) => {
   if (url.includes("uploads/")) {
     const filename = url.split("uploads/").pop();
     if (filename) {
+      if (window.electronAPI && window.electronAPI.userDataPath) {
+        return `file://${window.electronAPI.userDataPath}/uploads/${filename}`;
+      }
       const normalizedRelative = `images/uploads/${filename}`;
       // In development or when loaded via HTTP, root-relative is best
       if (window.location.protocol !== "file:") {

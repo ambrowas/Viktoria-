@@ -57,7 +57,7 @@ export default function QuickPlayWrapper({ game, teams: initialTeams, onExit }: 
 
         if (type === 'play_bg_music' || type === 'play_audio') {
             if (payload?.soundId === 'viktoria') {
-                magicalSound.loop = false;
+                magicalSound.setLoop(false);
                 magicalSound.play();
             }
         }

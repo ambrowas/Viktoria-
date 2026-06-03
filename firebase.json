@@ -3,6 +3,7 @@
         "rules": "firestore.rules"
     },
     "hosting": {
+        "target": "judges",
         "public": "dist",
         "ignore": [
             "firebase.json",

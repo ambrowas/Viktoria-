@@ -1,21 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Game, JeopardyGame, JeopardyCategory, JeopardyQuestion, JeopardyTurnMode } from '@/types';
+import { Game, QuizBoardGame, QuizBoardCategory, QuizBoardQuestion, QuizBoardTurnMode } from '@/types';
 import { PlusIcon, TrashIcon, SaveIcon, PencilIcon } from '@components/icons/IconDefs';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { resolveMediaUrl } from '@/utils/media';
 
 
 
-interface JeopardyEditorProps {
-  game: JeopardyGame;
+interface QuizBoardEditorProps {
+  game: QuizBoardGame;
   setGame: React.Dispatch<React.SetStateAction<Partial<Game> | null>>;
 }
 
 const POINT_VALUES = [100, 200, 300, 400, 500] as const;
 
 // Fields we update via a single setter; options handled separately
-type UpdatableJeopardyQuestionFields = Omit<
-  JeopardyQuestion,
+type UpdatableQuizBoardQuestionFields = Omit<
+  QuizBoardQuestion,
   'id' | 'points' | 'options'
 >;
 
@@ -283,14 +283,14 @@ const MediaUpload: React.FC<MediaUploadProps> = ({
    Question Modal (a11y-fixed)
    ========================= */
 interface QuestionModalProps {
-  category: JeopardyCategory | null;
-  question: JeopardyQuestion | null;
+  category: QuizBoardCategory | null;
+  question: QuizBoardQuestion | null;
   onClose: () => void;
-  updateQuestionField: <K extends keyof UpdatableJeopardyQuestionFields>(
+  updateQuestionField: <K extends keyof UpdatableQuizBoardQuestionFields>(
     categoryId: string,
     questionId: string,
     field: K,
-    value: UpdatableJeopardyQuestionFields[K]
+    value: UpdatableQuizBoardQuestionFields[K]
   ) => void;
   handleOptionChange: (
     categoryId: string,
@@ -821,7 +821,7 @@ const QuestionModal: React.FC<QuestionModalProps> = ({
    Category Defaults Modal
    ========================= */
 interface CategoryDefaultsModalProps {
-  category: JeopardyCategory;
+  category: QuizBoardCategory;
   onApply: (categoryId: string, settings: {
     answerType: "" | "DIRECT" | "MULTIPLE_CHOICE";
     questionMediaType: "" | "IMAGE" | "AUDIO" | "VIDEO";
@@ -943,7 +943,7 @@ const CategoryDefaultsModal: React.FC<CategoryDefaultsModalProps> = ({
 /* =========================
    Preview Modal
    ========================= */
-const PreviewModal: React.FC<{ game: JeopardyGame; onClose: () => void; onOpenClue: (catId: string, qId: string) => void; }> = ({
+const PreviewModal: React.FC<{ game: QuizBoardGame; onClose: () => void; onOpenClue: (catId: string, qId: string) => void; }> = ({
   game,
   onClose,
   onOpenClue,
@@ -987,10 +987,10 @@ const PreviewModal: React.FC<{ game: JeopardyGame; onClose: () => void; onOpenCl
 /* =========================
    Main Editor
    ========================= */
-const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
+const QuizBoardEditor: React.FC<QuizBoardEditorProps> = ({ game, setGame }) => {
   const [editing, setEditing] = useState<{ categoryId: string; questionId: string } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [categoryDefaultsFor, setCategoryDefaultsFor] = useState<JeopardyCategory | null>(null);
+  const [categoryDefaultsFor, setCategoryDefaultsFor] = useState<QuizBoardCategory | null>(null);
 
   // Derived positions for Save & Next
   const indices = useMemo(() => {
@@ -1039,7 +1039,7 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
 
   const handleTeamNameChange = (index: number, name: string) => {
     setGame(prev => {
-      const j = prev as JeopardyGame;
+      const j = prev as QuizBoardGame;
       const newTeams = [...(j.teams || ['', ''])] as [string, string];
       newTeams[index] = name;
       return { ...j, teams: newTeams };
@@ -1048,7 +1048,7 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
 
   /* ---------- Mutators (functional updaters to avoid focus loss) ---------- */
   const addCategory = () => {
-    const newCategory: JeopardyCategory = {
+    const newCategory: QuizBoardCategory = {
       id: crypto.randomUUID(),
       name: `Category ${game.categories.length + 1}`,
       questions: POINT_VALUES.map((points) => ({
@@ -1068,7 +1068,7 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
     };
     setGame((prev) => {
       if (!prev || !('categories' in prev)) return prev;
-      const j = prev as JeopardyGame;
+      const j = prev as QuizBoardGame;
       return { ...j, categories: [...j.categories, newCategory] };
     });
   };
@@ -1076,7 +1076,7 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
   const updateCategoryName = (categoryId: string, name: string) => {
     setGame((prev) => {
       if (!prev || !('categories' in prev)) return prev;
-      const j = prev as JeopardyGame;
+      const j = prev as QuizBoardGame;
       return {
         ...j,
         categories: j.categories.map((c) => (c.id === categoryId ? { ...c, name } : c)),
@@ -1088,7 +1088,7 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
     if (!window.confirm('Are you sure you want to delete this entire category?')) return;
     setGame((prev) => {
       if (!prev || !('categories' in prev)) return prev;
-      const j = prev as JeopardyGame;
+      const j = prev as QuizBoardGame;
       return { ...j, categories: j.categories.filter((c) => c.id !== categoryId) };
     });
     // If we deleted the category currently being edited, close the modal
@@ -1105,7 +1105,7 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
   ) => {
     setGame((prev) => {
       if (!prev || !("categories" in prev)) return prev;
-      const j = prev as JeopardyGame;
+      const j = prev as QuizBoardGame;
       return {
         ...j,
         categories: j.categories.map((c) => {
@@ -1148,7 +1148,7 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
 
     setGame((prev) => {
       if (!prev || !("categories" in prev)) return prev;
-      const j = prev as JeopardyGame;
+      const j = prev as QuizBoardGame;
       const categories = [...j.categories];
 
       const sourceCatIndex = categories.findIndex((c) => c.id === sourceCategoryId);
@@ -1190,15 +1190,15 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
     });
   };
 
-  const updateQuestionField = <K extends keyof UpdatableJeopardyQuestionFields>(
+  const updateQuestionField = <K extends keyof UpdatableQuizBoardQuestionFields>(
     categoryId: string,
     questionId: string,
     field: K,
-    value: UpdatableJeopardyQuestionFields[K]
+    value: UpdatableQuizBoardQuestionFields[K]
   ) => {
     setGame((prev) => {
       if (!prev || !('categories' in prev)) return prev;
-      const j = prev as JeopardyGame;
+      const j = prev as QuizBoardGame;
       return {
         ...j,
         categories: j.categories.map((c) =>
@@ -1223,7 +1223,7 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
   ) => {
     setGame((prev) => {
       if (!prev || !('categories' in prev)) return prev;
-      const j = prev as JeopardyGame;
+      const j = prev as QuizBoardGame;
       return {
         ...j,
         categories: j.categories.map((c) =>
@@ -1314,17 +1314,17 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
             id="turn-mode-select"
             value={game.turnMode || ''}
             onChange={(e) => {
-              const newTurnMode = e.target.value as JeopardyTurnMode;
+              const newTurnMode = e.target.value as QuizBoardTurnMode;
               setGame(prev => {
                 if (!prev) return null;
-                const j = prev as JeopardyGame;
+                const j = prev as QuizBoardGame;
                 return { ...j, turnMode: newTurnMode };
               });
             }}
             className="bg-base-300 p-3 rounded-lg w-full"
           >
-            <option value={JeopardyTurnMode.CONTINUE_ON_CORRECT}>Team continues after guessing correctly</option>
-            <option value={JeopardyTurnMode.ALTERNATE_AFTER_QUESTION}>Turn passes to the next team after each question</option>
+            <option value={QuizBoardTurnMode.CONTINUE_ON_CORRECT}>Team continues after guessing correctly</option>
+            <option value={QuizBoardTurnMode.ALTERNATE_AFTER_QUESTION}>Turn passes to the next team after each question</option>
           </select>
           <label className="flex items-start gap-3 mt-3">
             <input
@@ -1335,7 +1335,7 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
                 const enabled = e.target.checked;
                 setGame((prev) => {
                   if (!prev) return null;
-                  const j = prev as JeopardyGame;
+                  const j = prev as QuizBoardGame;
                   return { ...j, allowRebounds: enabled };
                 });
               }}
@@ -1352,7 +1352,7 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
 
       {/* Toolbar */}
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold">Jeopardy Board</h2>
+        <h2 className="text-2xl font-bold">QuizBoard Board</h2>
         <div className="flex gap-2">
           <button
             onClick={() => setShowPreview(true)}
@@ -1469,4 +1469,4 @@ const JeopardyEditor: React.FC<JeopardyEditorProps> = ({ game, setGame }) => {
   );
 };
 
-export default JeopardyEditor;
+export default QuizBoardEditor;

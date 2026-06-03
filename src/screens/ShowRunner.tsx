@@ -47,14 +47,14 @@ const MUSIC_PATHS = {
     countdown: "/sounds/phantasticbeats-afro-countdown-109083.mp3"
 };
 
-const SponsorLogosGrid: React.FC<{ sponsors: ShowMediaItem[] }> = ({ sponsors }) => {
+const SponsorLogosGrid: React.FC<{ sponsors: ShowMediaItem[]; isCenter?: boolean }> = ({ sponsors, isCenter = false }) => {
     if (sponsors.length === 0) return null;
     return (
         <div className="flex flex-wrap items-center justify-center gap-6 py-1 px-4 bg-slate-900/40 backdrop-blur border border-white/5 rounded-2xl max-w-full">
             {sponsors.map(s => {
                 let sizeClass = "h-8";
                 if (s.size === "medium") sizeClass = "h-12";
-                if (s.size === "large") sizeClass = "h-16";
+                if (s.size === "large") sizeClass = isCenter ? "h-24 md:h-28" : "h-16";
                 
                 return (
                     <div key={s.id} className="flex items-center justify-center hover:scale-105 transition-transform" title={s.name}>
@@ -62,7 +62,7 @@ const SponsorLogosGrid: React.FC<{ sponsors: ShowMediaItem[] }> = ({ sponsors })
                             <img 
                                 src={resolveMediaUrl(s.url)} 
                                 alt={s.name || "Sponsor"} 
-                                className={`${sizeClass} w-auto object-contain max-w-[200px] filter brightness-100 hover:brightness-110 transition-all`} 
+                                className={`${sizeClass} w-auto object-contain max-w-[280px] filter brightness-100 hover:brightness-110 transition-all`} 
                             />
                         ) : (
                             <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{s.name}</span>
@@ -164,18 +164,26 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
 
     const [previousStep, setPreviousStep] = useState<ShowStep>(initialState?.step || "lobby");
 
-    const headerSponsors = useMemo(() => {
+    const headerLeftSponsors = useMemo(() => {
         if (!show.sponsors) return [];
         return show.sponsors.filter(s => 
-            s.placement === 'header' && 
+            s.placement === 'header_left' && 
             (isViewer ? (s.screen === 'tv' || s.screen === 'both') : (s.screen === 'host' || s.screen === 'both'))
         );
     }, [show.sponsors, isViewer]);
 
-    const footerSponsors = useMemo(() => {
+    const headerCenterSponsors = useMemo(() => {
         if (!show.sponsors) return [];
         return show.sponsors.filter(s => 
-            s.placement === 'footer' && 
+            (s.placement === 'header_center' || s.placement === 'header') && 
+            (isViewer ? (s.screen === 'tv' || s.screen === 'both') : (s.screen === 'host' || s.screen === 'both'))
+        );
+    }, [show.sponsors, isViewer]);
+
+    const headerRightSponsors = useMemo(() => {
+        if (!show.sponsors) return [];
+        return show.sponsors.filter(s => 
+            s.placement === 'header_right' && 
             (isViewer ? (s.screen === 'tv' || s.screen === 'both') : (s.screen === 'host' || s.screen === 'both'))
         );
     }, [show.sponsors, isViewer]);
@@ -203,6 +211,10 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
             (isViewer ? (a.screen === 'tv' || a.screen === 'both') : (a.screen === 'host' || a.screen === 'both'))
         );
     }, [show.assets, isViewer]);
+
+    const hasHeaderSponsors = useMemo(() => {
+        return headerLeftSponsors.length > 0 || headerCenterSponsors.length > 0 || headerRightSponsors.length > 0;
+    }, [headerLeftSponsors, headerCenterSponsors, headerRightSponsors]);
 
     // Preload image assets to cache
     useEffect(() => {
@@ -465,7 +477,7 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
         }
 
         if (type === 'return_to_menu') {
-            if (step !== 'playing' || !currentGame || currentGame.type !== 'JEOPARDY') {
+            if (step !== 'playing' || !currentGame || currentGame.type !== 'QUIZBOARD') {
                 handleSaveAndExitMidGame();
             }
         }
@@ -572,9 +584,17 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
             <div className="flex flex-col h-screen overflow-hidden bg-black">
                 {hostControl === 'manual' && !isViewer && <MasterControlPanel />}
                 
-                {headerSponsors.length > 0 && (
-                    <div className="bg-[#050505] px-6 py-2 border-b border-white/5 flex items-center justify-center shrink-0">
-                        <SponsorLogosGrid sponsors={headerSponsors} />
+                {hasHeaderSponsors && (
+                    <div className="bg-[#050505] px-6 py-3 border-b border-white/5 grid grid-cols-3 items-center justify-between shrink-0 gap-4">
+                        <div className="flex items-center justify-start">
+                            <SponsorLogosGrid sponsors={headerLeftSponsors} />
+                        </div>
+                        <div className="flex items-center justify-center">
+                            <SponsorLogosGrid sponsors={headerCenterSponsors} isCenter={true} />
+                        </div>
+                        <div className="flex items-center justify-end">
+                            <SponsorLogosGrid sponsors={headerRightSponsors} />
+                        </div>
                     </div>
                 )}
                 
@@ -601,12 +621,6 @@ const ShowRunner: React.FC<ShowRunnerProps> = ({ show, games, onExit, initialSta
                         />
                     </div>
                 </div>
-
-                {footerSponsors.length > 0 && (
-                    <div className="bg-[#050505] px-6 py-2 border-t border-white/5 flex items-center justify-center shrink-0">
-                        <SponsorLogosGrid sponsors={footerSponsors} />
-                    </div>
-                )}
             </div>
         );
     }

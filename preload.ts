@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onMessage: (channel: string, callback: (event: unknown, data: unknown) => void) => {
     ipcRenderer.on(channel, (_event, data) => callback(_event, data));
   },
+  userDataPath: ipcRenderer.sendSync("get-user-data-path"),
 
   // 🎵 Safe sound player with fallback
   playSound: (filename: string) => {

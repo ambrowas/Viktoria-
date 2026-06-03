@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import { JeopardyGame, JeopardyCategory, JeopardyQuestion, JeopardyTurnMode, Team } from "@/types";
+import { QuizBoardGame, QuizBoardCategory, QuizBoardQuestion, QuizBoardTurnMode, Team } from "@/types";
 import { useSync } from "@/context/SyncContext";
 import { correctSound, wrongSound, timerSound } from "@/utils/sound";
 import { resolveMediaUrl } from "@/utils/media";
@@ -8,7 +8,7 @@ import { RotateCcw, LogOut } from "lucide-react";
 
 const TIMER_DURATION = 30;
 const CARD_BACK_IMG = resolveMediaUrl("images/TADTSlogo.jpg");
-const JEOPARDY_BC = "viktoria-jeopardy-state";
+const QUIZBOARD_BC = "viktoria-quizboard-state";
 
 type ClueType = "CALL_FRIEND" | "ASK_HOST" | "ASK_OTHER_TEAM";
 type CardView = "score" | "question" | "answer";
@@ -25,8 +25,8 @@ interface ActiveClueState {
   note?: string;
 }
 
-interface JeopardyGameProps {
-  game: JeopardyGame;
+interface QuizBoardGameProps {
+  game: QuizBoardGame;
   onExit: (points?: Record<string, number>) => void;
   onReturnToMainMenu?: (points?: Record<string, number>) => void;
   isViewer?: boolean;
@@ -85,7 +85,7 @@ const inferMediaType = (url?: string): "IMAGE" | "AUDIO" | "VIDEO" | undefined =
 
 // ── TV score overlay (cards shown center of board) ────────────────────────────
 const TVScoreOverlay: React.FC<{
-  active: { category: JeopardyCategory; question: JeopardyQuestion } | null;
+  active: { category: QuizBoardCategory; question: QuizBoardQuestion } | null;
   cardView: CardView;
   currentTeamIndex: number;
   teamScores: number[];
@@ -135,6 +135,19 @@ const TVScoreOverlay: React.FC<{
                     <p className="text-3xl md:text-4xl lg:text-5xl font-black leading-relaxed text-white">{active.question.question || "?"}</p>
                   </div>
 
+                  {active.question.type === "MULTIPLE_CHOICE" && active.question.options && active.question.options.length > 0 && (
+                    <div className="grid grid-cols-1 gap-2 w-full mt-2 shrink-0">
+                      {active.question.options.map((opt, oIdx) => (
+                        <div key={oIdx} className="bg-blue-950/70 border border-blue-500/20 rounded-xl px-4 py-2 text-left text-white font-bold flex items-center gap-3 shadow-md">
+                          <span className="w-5 h-5 bg-yellow-400 text-black rounded-full flex items-center justify-center font-black text-xs shrink-0">
+                            {String.fromCharCode(65 + oIdx)}
+                          </span>
+                          <span className="text-sm md:text-base leading-snug">{opt}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {activeClue && (
                     <div className="bg-blue-900/50 rounded-xl p-3 border border-blue-500/40 w-full text-center space-y-1 animate-fade-in shrink-0">
                       <p className="text-blue-100 font-bold text-lg">
@@ -158,6 +171,19 @@ const TVScoreOverlay: React.FC<{
                 <div className="bg-blue-900/85 backdrop-blur rounded-2xl px-12 py-8 border border-blue-400/40 shadow-2xl w-full">
                   <p className="text-4xl md:text-5xl lg:text-6xl font-black leading-relaxed text-white">{active.question.question || "?"}</p>
                 </div>
+
+                {active.question.type === "MULTIPLE_CHOICE" && active.question.options && active.question.options.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mt-4">
+                    {active.question.options.map((opt, oIdx) => (
+                      <div key={oIdx} className="bg-blue-900/60 border border-blue-400/30 rounded-2xl px-6 py-4 text-left text-white font-extrabold flex items-center gap-4 shadow-lg">
+                        <span className="w-8 h-8 bg-yellow-400 text-black rounded-full flex items-center justify-center font-black text-lg shrink-0">
+                          {String.fromCharCode(65 + oIdx)}
+                        </span>
+                        <span className="text-lg md:text-xl leading-snug">{opt}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {activeClue && (
                   <div className="bg-blue-900/50 rounded-xl p-4 border border-blue-500/40 w-full text-center space-y-1 animate-fade-in shrink-0">
@@ -307,7 +333,7 @@ const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" | null; correctAnswe
 };
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
-const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onReturnToMainMenu, isViewer = false, teams, teamScores: initialTeamScores, onScoreChange }) => {
+const QuizBoardGameScreen: React.FC<QuizBoardGameProps> = ({ game, onExit, onReturnToMainMenu, isViewer = false, teams, teamScores: initialTeamScores, onScoreChange }) => {
   const { sessionData, updateSession, isRemoteMode } = useSync();
   const { lang } = useLanguage();
 
@@ -334,7 +360,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
     return currentIndex;
   };
 
-  const [active, setActive] = useState<{ category: JeopardyCategory; question: JeopardyQuestion } | null>(null);
+  const [active, setActive] = useState<{ category: QuizBoardCategory; question: QuizBoardQuestion } | null>(null);
   const activeQuestionMediaType = active?.question.questionMediaType || inferMediaType(active?.question.questionMediaUrl);
   const activeAnswerMediaType = active?.question.answerMediaType || inferMediaType(active?.question.answerMediaUrl);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -355,6 +381,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
   const [canFlashTimerButton, setCanFlashTimerButton] = useState(false);
   const feedbackCallbackRef = useRef<() => void>(() => {});
   const prevRemoteActiveIdRef = useRef<string | null>(null);
+  const [feedbackNextStep, setFeedbackNextStep] = useState<"rebound" | "explanation" | "grid">("grid");
 
   const handleExitClick = () => {
     const msg = lang === "es" ? "¿Estás seguro de que deseas salir del juego?" : "Are you want to exit the game?";
@@ -448,7 +475,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
 
   useEffect(() => {
     if (isViewer) return;
-    const bc = new BroadcastChannel(JEOPARDY_BC);
+    const bc = new BroadcastChannel(QUIZBOARD_BC);
     bcRef.current = bc;
     bc.onmessage = (ev) => {
       if (ev.data?.type === "REQUEST_STATE") {
@@ -486,7 +513,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
   // ── TV: receive from PC ───────────────────────────────────────────────────
   useEffect(() => {
     if (!isViewer) return;
-    const bc = new BroadcastChannel(JEOPARDY_BC);
+    const bc = new BroadcastChannel(QUIZBOARD_BC);
     bc.onmessage = (ev) => {
       const { type: t, active: a, showAnswer: sa, cardView: cv, usedIds: ui, currentTeamIndex: ct, teamScores: ts, timeLeft: tl, activeClue: ac, hasReboundAttempted: hr, feedback: fb, revealAnswerInFeedback: raf, attemptedTeamIndices: ati } = ev.data;
       if (t === "STATE_UPDATE") {
@@ -548,7 +575,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
       game.categories.forEach(cat => {
         const q = cat.questions.find(qq => qq.id === qId);
         if (q) {
-          setActive({ category: cat, question: q as JeopardyQuestion });
+          setActive({ category: cat, question: q as QuizBoardQuestion });
           setShowAnswer(sessionData.isAnswerRevealed || false);
           if (sessionData.cardView !== undefined) setCardView(sessionData.cardView as CardView);
           setTimeLeft(TIMER_DURATION);
@@ -709,11 +736,27 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
 
   const showFeedback = (
     type: "correct" | "wrong",
-    options?: { closeAfter?: boolean; durationMs?: number; onComplete?: () => void; revealAnswer?: boolean }
+    options?: {
+      closeAfter?: boolean;
+      durationMs?: number;
+      onComplete?: () => void;
+      revealAnswer?: boolean;
+      nextStep?: "rebound" | "explanation" | "grid";
+    }
   ) => {
-    const { closeAfter = true, onComplete, revealAnswer = false } = options || {};
+    const { closeAfter = true, onComplete, revealAnswer = false, nextStep } = options || {};
     setFeedback(type);
     setRevealAnswerInFeedback(revealAnswer);
+
+    if (nextStep) {
+      setFeedbackNextStep(nextStep);
+    } else if (closeAfter === false) {
+      setFeedbackNextStep("rebound");
+    } else if (onComplete && (!!active?.question.explanation?.trim() || !!active?.question.answerMediaUrl?.trim())) {
+      setFeedbackNextStep("explanation");
+    } else {
+      setFeedbackNextStep("grid");
+    }
 
     // Save completion callback to run when Host clicks "Continue"
     feedbackCallbackRef.current = () => {
@@ -734,7 +777,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
   };
 
   const advanceTurnAfterResolution = (result: "correct" | "wrong", basis: number) => {
-    const shouldSwitch = result === "wrong" || game.turnMode === JeopardyTurnMode.ALTERNATE_AFTER_QUESTION;
+    const shouldSwitch = result === "wrong" || game.turnMode === QuizBoardTurnMode.ALTERNATE_AFTER_QUESTION;
     const nextTeam = shouldSwitch ? (basis + 1) % showTeams.length : basis;
     setCurrentTeamIndex(nextTeam);
     setHasReboundAttempted(false);
@@ -758,9 +801,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
       markUsed(active.question.id);
       setIsTimerRunning(false);
 
-      const hasExplanation = !!active.question.explanation?.trim();
+      const hasExplanation = !!active.question.explanation?.trim() || !!active.question.answerMediaUrl?.trim();
       showFeedback("correct", {
         closeAfter: !hasExplanation,
+        nextStep: hasExplanation ? "explanation" : "grid",
         onComplete: hasExplanation
           ? () => {
               setCardView("answer");
@@ -786,9 +830,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
     markUsed(active.question.id);
     setIsTimerRunning(false);
 
-    const hasExplanation = !!active.question.explanation?.trim();
+    const hasExplanation = !!active.question.explanation?.trim() || !!active.question.answerMediaUrl?.trim();
     showFeedback("correct", {
       closeAfter: !hasExplanation,
+      nextStep: hasExplanation ? "explanation" : "grid",
       onComplete: hasExplanation
         ? () => {
             setCardView("answer");
@@ -830,6 +875,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
       setTimeLeft(TIMER_DURATION);
       showFeedback("wrong", {
         closeAfter: false,
+        nextStep: "rebound",
         revealAnswer: false, // DO NOT reveal answer on intermediate rebound
         onComplete: () => {
           setIsTimerRunning(true);
@@ -843,10 +889,11 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
     setIsTimerRunning(false);
 
     const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : failingTeam;
-    const hasExplanation = !!active.question.explanation?.trim();
+    const hasExplanation = !!active.question.explanation?.trim() || !!active.question.answerMediaUrl?.trim();
     
     showFeedback("wrong", {
       closeAfter: !hasExplanation,
+      nextStep: hasExplanation ? "explanation" : "grid",
       revealAnswer: true, // REVEAL answer on final wrong
       onComplete: hasExplanation
         ? () => {
@@ -905,7 +952,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
     setShowClueMenu(false);
   };
 
-  const openQuestion = (category: JeopardyCategory, question: JeopardyQuestion) => {
+  const openQuestion = (category: QuizBoardCategory, question: QuizBoardQuestion) => {
     setActive({ category, question });
     setShowAnswer(false);
     setCardView("question");
@@ -931,7 +978,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
   useEffect(() => {
     if (active?.question.questionMediaUrl) {
       const resolved = resolveMediaUrl(active.question.questionMediaUrl);
-      console.log("[JeopardyGame] question media", { raw: active.question.questionMediaUrl, resolved, type: active.question.questionMediaType });
+      console.log("[QuizBoardGame] question media", { raw: active.question.questionMediaUrl, resolved, type: active.question.questionMediaType });
     }
   }, [active?.question.questionMediaUrl, active?.question.questionMediaType]);
 
@@ -1008,7 +1055,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
             ) : (
               <div>
                 <h1 className="text-4xl font-extrabold tracking-widest uppercase bg-gradient-to-r from-yellow-300 to-amber-500 bg-clip-text text-transparent">
-                  {game.name || "Jeopardy"}
+                  {game.name || "QuizBoard"}
                 </h1>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Viktoria Game Show</p>
               </div>
@@ -1105,7 +1152,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
       {/* Top bar with game name and scores — identical to original */}
       <header className="flex items-center justify-between p-4 border-b border-slate-700">
         <div>
-          <h1 className="text-3xl font-bold tracking-wide">Jeopardy</h1>
+          <h1 className="text-3xl font-bold tracking-wide">QuizBoard</h1>
           <p className="text-sm text-slate-300">{game.name || "Custom board"} · {game.categories.length} categories</p>
         </div>
         <div className="flex items-center gap-4">
@@ -1262,9 +1309,36 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
 
                   {/* Right Column: Question + Correct Answer + Clues (5 cols) */}
                   <div className="lg:col-span-5 flex flex-col gap-4 justify-center items-center h-full max-h-[60vh] overflow-hidden w-full">
-                    <div className="bg-slate-800 rounded-xl p-6 flex-1 flex items-center justify-center text-center min-h-[150px]">
+                    <div className="bg-slate-800 rounded-xl p-6 flex-1 flex items-center justify-center text-center min-h-[150px] w-full">
                       <p className="text-3xl leading-relaxed font-semibold">{active.question.question || "No clue provided."}</p>
                     </div>
+
+                    {active.question.type === "MULTIPLE_CHOICE" && active.question.options && active.question.options.length > 0 && (
+                      <div className="grid grid-cols-1 gap-2 w-full shrink-0">
+                        {active.question.options.map((opt, oIdx) => {
+                          const isCorrectOpt = opt.trim().toLowerCase() === active.question.correctAnswer?.trim().toLowerCase();
+                          return (
+                            <button
+                              key={oIdx}
+                              onClick={() => {
+                                if (isCorrectOpt) {
+                                  handleCorrect();
+                                } else {
+                                  handleWrong();
+                                }
+                              }}
+                              disabled={feedback !== null || showAnswer}
+                              className="bg-slate-800 hover:bg-slate-700 active:bg-slate-900 border border-slate-700 hover:border-yellow-400/50 rounded-xl px-4 py-2.5 text-left text-white font-semibold flex items-center gap-3 transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed w-full"
+                            >
+                              <span className="w-5 h-5 bg-yellow-400 text-black rounded-full flex items-center justify-center font-black text-[10px] shrink-0">
+                                {String.fromCharCode(65 + oIdx)}
+                              </span>
+                              <span className="text-xs md:text-sm leading-snug">{opt}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* Correct answer bar */}
                     <div className="bg-emerald-900/80 border-2 border-emerald-400 rounded-xl px-5 py-3 flex flex-col gap-2 w-full shrink-0">
@@ -1274,6 +1348,12 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
                       </div>
                       {active.question.explanation?.trim() && (
                         <p className="text-xs text-emerald-200 italic leading-relaxed pt-2 border-t border-emerald-800">{active.question.explanation}</p>
+                      )}
+                      {showAnswer && active.question.answerMediaUrl && (active.question.answerMediaType === "AUDIO" || inferMediaType(active.question.answerMediaUrl) === "AUDIO") && (
+                        <div className="mt-3 p-3 bg-emerald-950/60 border border-emerald-500/30 rounded-lg flex flex-col gap-1 w-full animate-fade-in">
+                          <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider">🎵 Post-Explanation Audio</span>
+                          <audio controls autoPlay src={resolveMediaUrl(active.question.answerMediaUrl)} className="w-full mt-1" />
+                        </div>
                       )}
                     </div>
 
@@ -1304,11 +1384,44 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
                     <p className="text-4xl leading-relaxed font-semibold">{active.question.question || "No clue provided."}</p>
                   </div>
 
+                  {active.question.type === "MULTIPLE_CHOICE" && active.question.options && active.question.options.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                      {active.question.options.map((opt, oIdx) => {
+                        const isCorrectOpt = opt.trim().toLowerCase() === active.question.correctAnswer?.trim().toLowerCase();
+                        return (
+                          <button
+                            key={oIdx}
+                            onClick={() => {
+                              if (isCorrectOpt) {
+                                handleCorrect();
+                              } else {
+                                handleWrong();
+                              }
+                            }}
+                            disabled={feedback !== null || showAnswer}
+                            className="bg-slate-800 hover:bg-slate-750 active:bg-slate-900 border border-slate-700 hover:border-yellow-400/50 rounded-2xl px-6 py-4 text-left text-white font-bold flex items-center gap-4 shadow-md transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="w-8 h-8 bg-yellow-400 text-black rounded-full flex items-center justify-center font-black text-lg shrink-0">
+                              {String.fromCharCode(65 + oIdx)}
+                            </span>
+                            <span className="text-lg md:text-xl leading-snug">{opt}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {/* Correct answer bar */}
                   <div className="bg-emerald-900/80 border-2 border-emerald-400 rounded-xl px-8 py-5 flex items-start gap-6 w-full shrink-0">
                     <div className="flex-1">
                       <span className="text-emerald-300 text-xs font-black uppercase tracking-widest block mb-1">✓ Correct Answer</span>
                       <span className="text-3xl font-black text-white">{active.question.correctAnswer || "—"}</span>
+                      {showAnswer && active.question.answerMediaUrl && (active.question.answerMediaType === "AUDIO" || inferMediaType(active.question.answerMediaUrl) === "AUDIO") && (
+                        <div className="mt-4 p-3 bg-emerald-950/60 border border-emerald-500/30 rounded-lg flex flex-col gap-1 w-full animate-fade-in text-left">
+                          <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider">🎵 Post-Explanation Audio</span>
+                          <audio controls autoPlay src={resolveMediaUrl(active.question.answerMediaUrl)} className="w-full mt-1" />
+                        </div>
+                      )}
                     </div>
                     {active.question.explanation?.trim() && (
                       <p className="text-sm text-emerald-200 italic max-w-md text-right leading-relaxed">{active.question.explanation}</p>
@@ -1362,7 +1475,9 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
                     onClick={handleFeedbackContinue}
                     className="px-8 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 text-xl shadow-lg ring-4 ring-blue-400 animate-pulse"
                   >
-                    {lang === "es" ? "Continuar" : "Continue"}
+                    {feedbackNextStep === "rebound" && (lang === "es" ? "Continuar (Rebote - Siguiente Equipo)" : "Continue (Rebound - Next Team)")}
+                    {feedbackNextStep === "explanation" && (lang === "es" ? "Continuar (Ver Explicación)" : "Continue (Show Explanation)")}
+                    {feedbackNextStep === "grid" && (lang === "es" ? "Continuar (Volver al Tablero)" : "Continue (Return to Grid)")}
                   </button>
                 ) : showAnswer ? (
                   <>
@@ -1370,7 +1485,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
                       onClick={clearQuestionState}
                       className="px-8 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 text-xl shadow-lg ring-4 ring-blue-400 animate-pulse"
                     >
-                      Next (Return to Grid)
+                      {lang === "es" ? "Siguiente (Volver al Tablero)" : "Next (Return to Grid)"}
                     </button>
                   </>
                 ) : (
@@ -1427,4 +1542,4 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
   );
 };
 
-export default JeopardyGameScreen;
+export default QuizBoardGameScreen;

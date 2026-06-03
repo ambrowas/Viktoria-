@@ -6,7 +6,7 @@ export const fallbackGames: Game[] = [
     "name": "Africa Day Round I",
     "description": "Let's celebrate Africa Day 2026 by testing how much you really know about Africa",
     "createdAt": "2026-05-09T15:58:00.415Z",
-    "type": GameType.JEOPARDY,
+    "type": GameType.QUIZBOARD,
     "categories": [
       {
         "id": "caaa336b-5c21-43a7-8646-b83e5e490804",
@@ -576,7 +576,7 @@ export const fallbackGames: Game[] = [
     "name": "Africa Day Round II",
     "description": "",
     "createdAt": "2026-05-11T03:30:47.193Z",
-    "type": GameType.JEOPARDY,
+    "type": GameType.QUIZBOARD,
     "categories": [
       {
         "id": "ba565874-a124-4db7-a323-2c14af53d42d",

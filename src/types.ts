@@ -7,7 +7,7 @@ export enum GameType {
   MEMORY = "MEMORY",
   HANGMAN = "HANGMAN",
   DEFINITIONS = "DEFINITIONS",
-  JEOPARDY = "JEOPARDY",
+  QUIZBOARD = "QUIZBOARD",
   FAMILY_FEUD = "FAMILY_FEUD",
   CHAIN_REACTION = "CHAIN_REACTION",
   PYRAMID = "PYRAMID",
@@ -16,12 +16,13 @@ export enum GameType {
   WHEEL_OF_FORTUNE = "WHEEL_OF_FORTUNE",
   LOTTERY = "LOTTERY",
   BINGO = "BINGO", // ✅ NEW
+  SMART_AZZ = "SMART_AZZ",
 }
 
 
-// Jeopardy point values
-export const JEOPARDY_POINT_VALUES = [100, 200, 300, 400, 500] as const;
-export type JeopardyPointValue = (typeof JEOPARDY_POINT_VALUES)[number];
+// QuizBoard point values
+export const QUIZBOARD_POINT_VALUES = [100, 200, 300, 400, 500] as const;
+export type QuizBoardPointValue = number;
 
 // -----------------------------
 // Shared Base
@@ -79,13 +80,13 @@ export interface ChainReactionGame extends GameBase {
 }
 
 // -----------------------------
-// Jeopardy
+// QuizBoard
 // -----------------------------
-export interface JeopardyQuestion {
+export interface QuizBoardQuestion {
   id: string;
   question: string;
   correctAnswer: string;
-  points: JeopardyPointValue;
+  points: QuizBoardPointValue;
   type?: "DIRECT" | "MULTIPLE_CHOICE";
   options?: string[];
   explanation?: string;
@@ -96,24 +97,26 @@ export interface JeopardyQuestion {
   answerMediaType?: "IMAGE" | "AUDIO" | "VIDEO";
 }
 
-export interface JeopardyCategory {
+export interface QuizBoardCategory {
   id: string;
   name: string;
-  questions: JeopardyQuestion[];
+  questions: QuizBoardQuestion[];
 }
 
-export enum JeopardyTurnMode {
+export enum QuizBoardTurnMode {
   CONTINUE_ON_CORRECT = "CONTINUE_ON_CORRECT",
   ALTERNATE_AFTER_QUESTION = "ALTERNATE_AFTER_QUESTION",
 }
 
-export interface JeopardyGame extends GameBase {
-  type: GameType.JEOPARDY;
-  categories: JeopardyCategory[];
+export interface QuizBoardGame extends GameBase {
+  type: GameType.QUIZBOARD;
+  categories: QuizBoardCategory[];
   teams?: string[];
-  turnMode?: JeopardyTurnMode;
+  turnMode?: QuizBoardTurnMode | "CONTINUE_ON_CORRECT" | "ALTERNATE_AFTER_QUESTION";
   allowRebounds?: boolean;
   cluesPerTeam?: number;
+  availableClues?: string[];
+  pointIncreaseValue?: number;
 }
 
 // -----------------------------
@@ -281,13 +284,31 @@ export interface BingoGame extends GameBase {
   round: BingoRound | null;
 }
 
+// -----------------------------
+// Face Off (SmartAzz)
+// -----------------------------
+export interface SmartAzzCategory {
+  id: string;
+  name: string;
+  pointValue?: number;
+  validAnswers: string[];
+  explanation?: string;
+}
+
+export interface SmartAzzGame extends GameBase {
+  type: GameType.SMART_AZZ;
+  categories: SmartAzzCategory[];
+  turnTimer?: number;
+  globalTimer?: number;
+}
+
 
 // -----------------------------
 // ✅ Unified Game Union
 // -----------------------------
 export type Game =
   | ChainReactionGame
-  | JeopardyGame
+  | QuizBoardGame
   | FamilyFeudGame
   | MemoryGame
   | HangmanGame
@@ -297,7 +318,8 @@ export type Game =
   | PriceIsRightGame
   | WheelOfFortuneGame
   | LotteryGame
-  | BingoGame; // ✅ NEW
+  | BingoGame
+  | SmartAzzGame; // ✅ NEW
 
 // -----------------------------
 // Shows & Teams
@@ -328,7 +350,7 @@ export interface ShowMediaItem {
   name?: string;
   url: string;
   size: "small" | "medium" | "large";
-  placement: "lobby" | "header" | "footer" | "credits" | "sidebar" | "commercial";
+  placement: "lobby" | "header" | "header_left" | "header_center" | "header_right" | "footer" | "credits" | "sidebar" | "commercial";
   screen: "tv" | "host" | "both";
   tier?: "platinum" | "gold" | "silver" | "bronze" | "partner" | "supporter";
 }

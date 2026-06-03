@@ -30,7 +30,7 @@ const MemoryPreview: React.FC<MemoryPreviewProps> = ({
   const [flippedCards, setFlippedCards] = useState<typeof cards>([]);
   const [isAutoRevealing, setIsAutoRevealing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const revealTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const revealTimeoutRef = useRef<any>(null);
 
   // Shuffle and initialize cards
   useEffect(() => {

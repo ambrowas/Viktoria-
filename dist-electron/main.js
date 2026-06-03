@@ -110,13 +110,8 @@ electron_1.ipcMain.handle("copy-media-file", async (_event, sourcePath) => {
         return null;
     }
     try {
-        // Define the destination for our uploads
-        const isDev = process.env.NODE_ENV === "development";
-        // In dev, we write to the public folder directly so Vite picks it up.
-        // In prod, assets are in `dist`, which is a sibling to `dist-electron`.
-        const targetDir = isDev
-            ? path_1.default.join(process.cwd(), "public", "images", "uploads")
-            : path_1.default.join(__dirname, "..", "dist", "images", "uploads");
+        // Define the destination for our uploads in userData directory (always writeable)
+        const targetDir = path_1.default.join(electron_1.app.getPath("userData"), "uploads");
         // Ensure the target directory exists
         if (!fs_1.default.existsSync(targetDir)) {
             fs_1.default.mkdirSync(targetDir, { recursive: true });
@@ -164,10 +159,7 @@ electron_1.ipcMain.handle("save-data-url", async (_event, dataUrl) => {
             "video/quicktime": ".mov",
         };
         const ext = extensionMap[mimeType] || "";
-        const isDev = process.env.NODE_ENV === "development";
-        const targetDir = isDev
-            ? path_1.default.join(process.cwd(), "public", "images", "uploads")
-            : path_1.default.join(__dirname, "..", "dist", "images", "uploads");
+        const targetDir = path_1.default.join(electron_1.app.getPath("userData"), "uploads");
         if (!fs_1.default.existsSync(targetDir)) {
             fs_1.default.mkdirSync(targetDir, { recursive: true });
             console.log(`Created directory: ${targetDir}`);
@@ -182,6 +174,9 @@ electron_1.ipcMain.handle("save-data-url", async (_event, dataUrl) => {
         console.error("Error saving data URI:", error);
         return null;
     }
+});
+electron_1.ipcMain.on("get-user-data-path", (event) => {
+    event.returnValue = electron_1.app.getPath("userData");
 });
 const slugToDir = (slug) => path_1.default.join(electron_1.app.getPath("userData"), "games", slug || "game");
 const listLocalGames = () => {
@@ -361,6 +356,31 @@ electron_1.ipcMain.on("message", (event, data) => {
    APP LIFECYCLE
 ----------------------------- */
 electron_1.app.whenReady().then(() => {
+    // Copy default/existing uploads to userData/uploads so they are all in one place
+    try {
+        const isDev = process.env.NODE_ENV === "development" || !fs_1.default.existsSync(path_1.default.join(__dirname, "../dist/index.html"));
+        const sourceUploadsDir = isDev
+            ? path_1.default.join(__dirname, "..", "public", "images", "uploads")
+            : path_1.default.join(__dirname, "..", "dist", "images", "uploads");
+        const targetUploadsDir = path_1.default.join(electron_1.app.getPath("userData"), "uploads");
+        if (fs_1.default.existsSync(sourceUploadsDir)) {
+            if (!fs_1.default.existsSync(targetUploadsDir)) {
+                fs_1.default.mkdirSync(targetUploadsDir, { recursive: true });
+            }
+            const files = fs_1.default.readdirSync(sourceUploadsDir);
+            for (const file of files) {
+                const srcFile = path_1.default.join(sourceUploadsDir, file);
+                const destFile = path_1.default.join(targetUploadsDir, file);
+                if (!fs_1.default.existsSync(destFile) && fs_1.default.statSync(srcFile).isFile()) {
+                    fs_1.default.copyFileSync(srcFile, destFile);
+                    console.log(`Initialized default upload: ${file}`);
+                }
+            }
+        }
+    }
+    catch (err) {
+        console.error("Failed to copy default uploads to userData directory:", err);
+    }
     createWindow();
     electron_1.app.on("activate", () => {
         if (electron_1.BrowserWindow.getAllWindows().length === 0)

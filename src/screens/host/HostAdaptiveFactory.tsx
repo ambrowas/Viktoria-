@@ -1,7 +1,7 @@
 import React from 'react';
 import { useSync } from '@/context/SyncContext';
 import { GameType, Game } from '@/types';
-import JeopardyController from './controllers/JeopardyController';
+import QuizBoardController from './controllers/QuizBoardController';
 import RoscoController from './controllers/RoscoController';
 import FeudController from './controllers/FeudController';
 import WheelOfFortuneController from './controllers/WheelOfFortuneController';
@@ -39,8 +39,8 @@ const HostAdaptiveFactory: React.FC<HostAdaptiveFactoryProps> = ({ currentGame }
         };
 
         switch (currentGame.type) {
-            case GameType.JEOPARDY:
-                return <JeopardyController {...props} />;
+            case GameType.QUIZBOARD:
+                return <QuizBoardController {...props} />;
             case GameType.ROSCO:
                 return <RoscoController {...props} />;
             case GameType.FAMILY_FEUD:

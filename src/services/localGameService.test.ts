@@ -3,7 +3,8 @@
  */
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { getGames, saveGame, deleteGame } from './localGameService';
-import type { Game, GameType } from '@/types';
+import { GameType } from '@/types';
+import type { Game } from '@/types';
 
 // Mock the Electron API that would be on the window object in the real app
 const mockElectronAPI = {
@@ -26,10 +27,10 @@ describe('localGameService', () => {
   // Tests for getGames
   // ===================================
   describe('getGames', () => {
-    it('should call the "list-games-local" IPC handler and return the games', async () => {
-      const mockGames: Partial<Game>[] = [
-        { id: '1', name: 'Jeopardy Fun', type: 'JEOPARDY' as GameType.JEOPARDY },
-        { id: '2', name: 'Family Feud Night', type: 'FAMILY_FEUD' as GameType.FAMILY_FEUD },
+    it('should call the "list-games-local" IPC handler and map legacy games to QuizBoard', async () => {
+      const mockGames: any[] = [
+        { id: '1', name: 'QuizBoard Fun', type: 'JEOPARDY' },
+        { id: '2', name: 'Family Feud Night', type: GameType.FAMILY_FEUD },
       ];
       mockElectronAPI.invoke.mockResolvedValue(mockGames);
 
@@ -37,7 +38,10 @@ describe('localGameService', () => {
 
       expect(mockElectronAPI.invoke).toHaveBeenCalledOnce();
       expect(mockElectronAPI.invoke).toHaveBeenCalledWith('list-games-local');
-      expect(games).toEqual(mockGames);
+      expect(games).toEqual([
+        { id: '1', name: 'QuizBoard Fun', type: 'QUIZBOARD' },
+        { id: '2', name: 'Family Feud Night', type: GameType.FAMILY_FEUD },
+      ]);
     });
 
     it('should return an empty array if the IPC call returns a non-array value', async () => {
@@ -63,7 +67,7 @@ describe('localGameService', () => {
       id: 'test-id-1',
       slug: 'test-game',
       name: 'Test Game',
-      type: 'JEOPARDY' as GameType.JEOPARDY,
+      type: GameType.QUIZBOARD,
       description: '',
       createdAt: new Date().toISOString(),
       categories: [],

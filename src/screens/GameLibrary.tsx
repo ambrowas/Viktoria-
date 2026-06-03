@@ -5,6 +5,7 @@ import TeamIcon from "@/components/TeamIcon";
 
 interface LibraryProps {
   games: Game[];
+  isLoading?: boolean;
   onPlay: (game: Game) => void;
   onQuickPlay: (game: Game, teams: Team[]) => void;
   onEdit: (id: string) => void;
@@ -19,7 +20,7 @@ const typeColors: Record<string, string> = {
   MEMORY: "#2b6cb0",
   HANGMAN: "#d69e2e",
   DEFINITIONS: "#38a169",
-  JEOPARDY: "#805ad5",
+  QUIZBOARD: "#805ad5",
   FAMILY_FEUD: "#dd6b20",
   CHAIN_REACTION: "#3182ce",
   PYRAMID: "#b7791f",

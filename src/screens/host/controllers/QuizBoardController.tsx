@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { useSync } from '@/context/SyncContext';
-import { JeopardyGame, JeopardyCategory, JeopardyQuestion } from '@/types';
+import { QuizBoardGame, QuizBoardCategory, QuizBoardQuestion } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, XCircle, Info, Eye, Music, RotateCcw } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 
-interface JeopardyControllerProps {
-    game: JeopardyGame;
+interface QuizBoardControllerProps {
+    game: QuizBoardGame;
     sessionData: any;
     updateSession: (data: any) => void;
 }
 
-const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionData, updateSession }) => {
+const QuizBoardController: React.FC<QuizBoardControllerProps> = ({ game, sessionData, updateSession }) => {
     const { lang } = useLanguage();
     const [showRestartConfirm, setShowRestartConfirm] = useState(false);
     const { sessionState } = sessionData;
@@ -30,14 +30,14 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
     const categories = game.categories || [];
 
     // Find active question details if any
-    let activeQuestion: JeopardyQuestion | null = null;
-    let activeCategory: JeopardyCategory | null = null;
+    let activeQuestion: QuizBoardQuestion | null = null;
+    let activeCategory: QuizBoardCategory | null = null;
 
     if (activeQuestionId) {
         for (const cat of categories) {
             const q = cat.questions.find(qq => qq.id === activeQuestionId);
             if (q) {
-                activeQuestion = q as JeopardyQuestion;
+                activeQuestion = q as QuizBoardQuestion;
                 activeCategory = cat;
                 break;
             }
@@ -91,7 +91,7 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                         <div className="flex justify-between items-center mb-6">
                             <div>
                                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#fca311]">{activeCategory?.name}</span>
-                                <h2 className="text-3xl font-black text-white">${(activeQuestion as JeopardyQuestion).points}</h2>
+                                <h2 className="text-3xl font-black text-white">${(activeQuestion as QuizBoardQuestion).points}</h2>
                             </div>
                             <button
                                 onClick={() => updateSession({ activeQuestionId: null, isAnswerRevealed: false, cardView: "score" })}
@@ -104,13 +104,13 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                         <div className="flex-1 space-y-6 flex flex-col justify-center max-w-xl mx-auto w-full">
                             <div className="bg-emerald-900/40 p-8 rounded-3xl border border-emerald-500/30 text-center space-y-4">
                                 <span className="text-[10px] text-emerald-400 font-black uppercase tracking-widest">Correct Answer</span>
-                                <p className="text-3xl font-black text-white">{(activeQuestion as JeopardyQuestion).correctAnswer}</p>
+                                <p className="text-3xl font-black text-white">{(activeQuestion as QuizBoardQuestion).correctAnswer}</p>
                             </div>
 
-                            {(activeQuestion as JeopardyQuestion).explanation && (
+                            {(activeQuestion as QuizBoardQuestion).explanation && (
                                 <div className="bg-white/5 p-8 rounded-3xl border border-white/10 text-center space-y-3">
                                     <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Explanation</span>
-                                    <p className="text-lg font-medium text-slate-200 leading-relaxed">{(activeQuestion as JeopardyQuestion).explanation}</p>
+                                    <p className="text-lg font-medium text-slate-200 leading-relaxed">{(activeQuestion as QuizBoardQuestion).explanation}</p>
                                 </div>
                             )}
 
@@ -145,7 +145,7 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#fca311]">{activeCategory?.name}</span>
-                            <h2 className="text-3xl font-black text-white">${(activeQuestion as JeopardyQuestion).points}</h2>
+                            <h2 className="text-3xl font-black text-white">${(activeQuestion as QuizBoardQuestion).points}</h2>
                         </div>
                         <button
                             onClick={() => updateSession({ activeQuestionId: null, isAnswerRevealed: false })}
@@ -156,18 +156,18 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                     </div>
 
                     {/* 🎬 MISSION 06: Premium Media Preview Section */}
-                    {(activeQuestion as JeopardyQuestion).questionMediaUrl && (
+                    {(activeQuestion as QuizBoardQuestion).questionMediaUrl && (
                         <div className="relative w-full h-48 md:h-64 bg-black rounded-3xl overflow-hidden mb-6 border border-white/10 shadow-2xl premium-card">
-                            {(activeQuestion as JeopardyQuestion).questionMediaType === 'IMAGE' ? (
+                            {(activeQuestion as QuizBoardQuestion).questionMediaType === 'IMAGE' ? (
                                 <img
-                                    src={`/api/media?path=${encodeURIComponent((activeQuestion as JeopardyQuestion).questionMediaUrl || '')}`}
+                                    src={`/api/media?path=${encodeURIComponent((activeQuestion as QuizBoardQuestion).questionMediaUrl || '')}`}
                                     alt="Question Preview"
                                     className="w-full h-full object-contain"
                                 />
                             ) : (
                                 <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#14213d] to-black p-8">
                                     <div className="p-6 rounded-full bg-white/5 border border-white/10 mb-4 glow-orange">
-                                        {(activeQuestion as JeopardyQuestion).questionMediaType === 'VIDEO' ? <Eye size={48} className="text-[#fca311]" /> :
+                                        {(activeQuestion as QuizBoardQuestion).questionMediaType === 'VIDEO' ? <Eye size={48} className="text-[#fca311]" /> :
                                             <Music size={48} className="text-[#fca311]" />}
                                     </div>
                                     <p className="text-slate-500 font-black uppercase tracking-widest text-[10px]">Media Active on Stage</p>
@@ -179,12 +179,12 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                     <div className="flex-1 space-y-4">
                         <div className="premium-glass p-8 rounded-3xl border border-white/5 relative overflow-hidden group">
                             <h3 className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2">Clue / Question</h3>
-                            <p className="text-2xl font-bold leading-tight relative z-10">{(activeQuestion as JeopardyQuestion).question}</p>
+                            <p className="text-2xl font-bold leading-tight relative z-10">{(activeQuestion as QuizBoardQuestion).question}</p>
                         </div>
 
                         <div className="bg-[#14213d]/40 p-8 rounded-3xl border border-[#fca311]/20 glow-orange">
                             <h3 className="text-[10px] text-[#fca311] font-black uppercase tracking-widest mb-2">Host Key: Correct Answer</h3>
-                            <p className="text-2xl font-black text-white">{(activeQuestion as JeopardyQuestion).correctAnswer}</p>
+                            <p className="text-2xl font-black text-white">{(activeQuestion as QuizBoardQuestion).correctAnswer}</p>
                         </div>
 
                         {sessionData.feedback ? (
@@ -271,8 +271,8 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                 <div className="flex-1 overflow-auto p-6 space-y-8 pb-12">
                     <div className="flex justify-between items-center bg-white/5 border border-white/5 rounded-3xl p-6 premium-glass">
                         <div className="text-left">
-                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#fca311]">Jeopardy Board</span>
-                            <h2 className="text-2xl font-black text-white">{game.name || 'Jeopardy Grid'}</h2>
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#fca311]">QuizBoard</span>
+                            <h2 className="text-2xl font-black text-white">{game.name || 'QuizBoard Grid'}</h2>
                         </div>
                         <button
                             onClick={() => setShowRestartConfirm(true)}
@@ -367,4 +367,4 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
     );
 };
 
-export default JeopardyController;
+export default QuizBoardController;

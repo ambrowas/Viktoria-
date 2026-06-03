@@ -1,6 +1,6 @@
 // src/types/sync.ts
 
-export type DeviceRole = 'host' | 'player' | 'viewer';
+export type DeviceRole = 'host' | 'player' | 'viewer' | 'judge';
 export type SessionStep = 'lobby' | 'question' | 'reveal' | 'scoreboard' | 'intermission' | string;
 
 export interface Participant {
@@ -60,6 +60,17 @@ export interface LiveSession {
     isTimerRunning?: boolean;
     timeLeft?: number;
     cardView?: string;
+    smartAzzState?: any;
+    eliminatedTeamIds?: string[];
+    reserveQuestions?: any[];
+    activeTieBreaker?: {
+        roundType: string;
+        question: any;
+        revealed: boolean;
+        winnerTeamId: string | null;
+        loserTeamId: string | null;
+    } | null;
+    observations?: any[];
     lastAction: string;
     updatedAt: any;
 }

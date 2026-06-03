@@ -14,7 +14,7 @@ import HangmanGameWrapper from "./games/HangmanGame";
 import MemoryGame from "./games/MemoryGame";
 import RoscoGameWrapper from "./games/RoscoGame";
 import FamilyFeudGameScreen from "./games/FamilyFeudGame";
-import JeopardyGameScreen from "./games/JeopardyGame";
+import QuizBoardGameScreen from "./games/QuizBoardGame";
 import PyramidGameScreen from "./games/PyramidGame";
 import ChainReactionGameScreen from "./games/ChainReactionGame";
 import DefinitionsGameWrapper from "./games/DefinitionsGameWrapper";
@@ -22,6 +22,7 @@ import PriceIsRightGame from "./games/PriceIsRightGame";
 import WheelOfFortuneGame from "./games/WheelOfFortuneGame";
 import LotteryGame from "./games/LotteryGame";
 import BingoGame from "./games/BingoGame"; // ✅ NEW
+import SmartAzzGameScreen from "./games/SmartAzzGame";
 
 // --- Sounds ---
 import { transitionSound, magicalSound, stopAllSounds } from "@/utils/sound";
@@ -34,13 +35,14 @@ const gameComponents: Record<GameType, React.FC<any>> = {
   [GameType.ROSCO]: RoscoGameWrapper,
   [GameType.FAMILY_FEUD]: FamilyFeudGameScreen,
   [GameType.CHAIN_REACTION]: ChainReactionGameScreen,
-  [GameType.JEOPARDY]: JeopardyGameScreen,
+  [GameType.QUIZBOARD]: QuizBoardGameScreen,
   [GameType.PYRAMID]: PyramidGameScreen,
   [GameType.DEFINITIONS]: DefinitionsGameWrapper,
   [GameType.PRICE_IS_RIGHT]: PriceIsRightGame,
   [GameType.WHEEL_OF_FORTUNE]: WheelOfFortuneGame,
   [GameType.LOTTERY]: LotteryGame,
   [GameType.BINGO]: BingoGame, // ✅ Added here
+  [GameType.SMART_AZZ]: SmartAzzGameScreen,
 };
 
 import type { Team } from "@/types";
@@ -56,6 +58,8 @@ interface GameRouterProps {
   hostControl?: "ipad" | "manual";
   playerControl?: "ipad" | "manual";
   isViewer?: boolean;
+  isObserveOnly?: boolean;
+  isPreview?: boolean;
 }
 
 const GameRouter: React.FC<GameRouterProps> = ({
@@ -69,6 +73,8 @@ const GameRouter: React.FC<GameRouterProps> = ({
   hostControl = 'ipad',
   playerControl = 'ipad',
   isViewer = false,
+  isObserveOnly = false,
+  isPreview = false,
 }) => {
   const { lang: globalLang } = useLanguage();
   const lang = language || globalLang;
@@ -159,6 +165,8 @@ const GameRouter: React.FC<GameRouterProps> = ({
       hostControl={hostControl}
       playerControl={playerControl}
       isViewer={isViewer}
+      isObserveOnly={isObserveOnly}
+      isPreview={isPreview}
     />
   );
 };
