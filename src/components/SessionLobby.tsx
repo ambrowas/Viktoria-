@@ -36,8 +36,7 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({
     sponsors
 }) => {
     const { lang } = useLanguage();
-    console.log("Lobby hostControl:", hostControl);
-    const { sessionId, participants: syncParticipants, sessionData, registerParticipant } = useSync();
+    const { sessionId, participants: syncParticipants, sessionData, registerParticipant, removeParticipant } = useSync();
     const participants = overrideParticipants ?? syncParticipants;
     const unassignedCount = useMemo(() => {
         return participants.filter(p => !p.teamId || p.teamId === '').length;
@@ -55,6 +54,23 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({
         }
         prevCountRef.current = participants.length;
     }, [participants.length]);
+
+    // Auto-remove extra players beyond configured limit and explicitly delete "Player 5" for Refugees if present
+    useEffect(() => {
+        if (!isViewer && sessionId) {
+            teams.forEach(team => {
+                const teamMembers = participants.filter(p => p.teamId === team.id);
+                const maxPlayers = team.players && team.players.length > 0 ? team.players.length : 4;
+                teamMembers.forEach((p, idx) => {
+                    const isRefugeePlayer5 = (team.name.toLowerCase().includes("refugee") || team.name.toLowerCase().replace(/\s/g, "") === "refugeez") && p.name.toLowerCase().includes("player 5");
+                    if (isRefugeePlayer5 || idx >= maxPlayers || p.name.toLowerCase().includes("player 5")) {
+                        console.log(`Auto-deleting extra/requested player ${p.name} from team ${team.name}`);
+                        removeParticipant(p.id);
+                    }
+                });
+            });
+        }
+    }, [participants, isViewer, sessionId, teams, removeParticipant]);
 
     const handleCopy = () => {
         if (sessionId) {
@@ -117,6 +133,8 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({
             <div className="flex-1 grid grid-cols-4 gap-8 mb-40">
                 {[...teams].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })).map((team, idx) => {
                     const members = getTeamParticipants(team.id);
+                    const maxPlayers = team.players && team.players.length > 0 ? team.players.length : 4;
+                    const canAddPlayer = members.length < maxPlayers;
                     return (
                         <motion.div
                             key={team.id}
@@ -140,55 +158,59 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({
                                     <h3 className="text-2xl font-black uppercase text-left">{team.name}</h3>
                                     <div className="flex items-center gap-3">
                                         <p className="text-slate-500 font-bold">{members.length} PLAYERS</p>
-                                        {!isViewer && (true) && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (true) {
-                                                        const btn = e.currentTarget;
-                                                        btn.disabled = true;
-                                                        const originalText = btn.innerText;
-                                                        btn.innerText = "...";
-                                                        console.log("Lobby: Triggering check-in for", team.name);
+                                        {!isViewer && (
+                                            canAddPlayer ? (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (canAddPlayer) {
+                                                            const btn = e.currentTarget;
+                                                            btn.disabled = true;
+                                                            const originalText = btn.innerText;
+                                                            btn.innerText = "...";
+                                                            console.log("Lobby: Triggering check-in for", team.name);
 
-                                                        // 🎉 Play immediately on click — don't wait for state update
-                                                        checkInSound.play();
+                                                            // 🎉 Play immediately on click — don't wait for state update
+                                                            checkInSound.play();
 
-                                                         const nextIndex = members.length;
-                                                         const playerName = team.players && team.players[nextIndex] && team.players[nextIndex].name
-                                                             ? team.players[nextIndex].name.trim()
-                                                             : `${team.name} Player ${nextIndex + 1}`;
+                                                            const nextIndex = members.length;
+                                                            const playerName = team.players && team.players[nextIndex] && team.players[nextIndex].name
+                                                                ? team.players[nextIndex].name.trim()
+                                                                : `${team.name} Player ${nextIndex + 1}`;
 
-                                                         registerParticipant(sessionId || 'local', {
-                                                             id: `manual-${team.id}-${Date.now()}`,
-                                                             name: playerName,
-                                                             teamId: team.id,
-                                                             role: 'player',
-                                                             isBuzzed: false
-                                                         }).then(() => {
-                                                            if (btn) {
-                                                                btn.disabled = false;
-                                                                btn.innerText = members.length > 0 ? "ADD PLAYER" : "Check In";
-                                                                console.log("Lobby: Check-in complete for", team.name, ". Total now:", members.length + 1);
-                                                            }
-                                                        }).catch(err => {
-                                                            console.error("Manual check-in failed:", err);
-                                                            if (!sessionId) {
-                                                                console.warn("Local check-in failed, but proceeding anyway.");
-                                                            } else {
-                                                                alert("Error checking in: " + err.message);
-                                                            }
-                                                            if (btn) {
-                                                                btn.disabled = false;
-                                                                btn.innerText = originalText;
-                                                            }
-                                                        });
-                                                    }
-                                                }}
-                                                className="bg-yellow-500 hover:bg-yellow-400 text-black text-[10px] font-black uppercase px-3 py-1.5 rounded-lg shadow-lg transition-transform active:scale-90"
-                                            >
-                                                {members.length > 0 ? "ADD PLAYER" : "Check In"}
-                                            </button>
+                                                            registerParticipant(sessionId || 'local', {
+                                                                id: `manual-${team.id}-${Date.now()}`,
+                                                                name: playerName,
+                                                                teamId: team.id,
+                                                                role: 'player',
+                                                                isBuzzed: false
+                                                            }).then(() => {
+                                                                if (btn) {
+                                                                    btn.disabled = false;
+                                                                    btn.innerText = members.length > 0 ? "ADD PLAYER" : "Check In";
+                                                                    console.log("Lobby: Check-in complete for", team.name, ". Total now:", members.length + 1);
+                                                                }
+                                                            }).catch(err => {
+                                                                console.error("Manual check-in failed:", err);
+                                                                if (!sessionId) {
+                                                                    console.warn("Local check-in failed, but proceeding anyway.");
+                                                                } else {
+                                                                    alert("Error checking in: " + err.message);
+                                                                }
+                                                                if (btn) {
+                                                                    btn.disabled = false;
+                                                                    btn.innerText = originalText;
+                                                                }
+                                                            });
+                                                        }
+                                                    }}
+                                                    className="bg-yellow-500 hover:bg-yellow-400 text-black text-[10px] font-black uppercase px-3 py-1.5 rounded-lg shadow-lg transition-transform active:scale-90"
+                                                >
+                                                    {members.length > 0 ? "ADD PLAYER" : "Check In"}
+                                                </button>
+                                            ) : (
+                                                <span className="text-slate-500 font-bold text-[10px] uppercase border border-slate-700 px-3 py-1.5 rounded-lg">FULL</span>
+                                            )
                                         )}
                                     </div>
                                 </div>
@@ -206,10 +228,12 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({
                                                 className="w-32 h-32 rounded-full flex items-center justify-center shadow-2xl relative z-10"
                                                 style={{ backgroundColor: `${team.color}20`, border: `4px solid ${team.color}` }}
                                             >
-                                                <TeamIcon iconName={team.emoji} className="w-20 h-20" style={{ color: team.color }} />
+                                                <div className="w-20 h-20 flex items-center justify-center">
+                                                    <TeamIcon iconName={team.emoji} className="w-20 h-20" style={{ color: team.color }} />
+                                                </div>
                                             </div>
                                             <motion.div
-                                                animate={{ scale: [1, 1.3, 1], opacity: [0.1, 0.3, 0.1] }}
+                                                animate={{ scale: [1, 1.1, 1], opacity: [0.1, 0.2, 0.1] }}
                                                 transition={{ repeat: Infinity, duration: 3 }}
                                                 className="absolute inset-0 rounded-full blur-3xl"
                                                 style={{ backgroundColor: team.color }}
@@ -226,31 +250,47 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({
                                                         initial={{ opacity: 0, scale: 0.8 }}
                                                         animate={{ opacity: 1, scale: 1 }}
                                                         transition={{ delay: pIdx * 0.1 }}
-                                                        className="bg-white/10 px-5 py-2 rounded-2xl text-base font-bold border border-white/10 backdrop-blur-md shadow-lg"
+                                                        className="bg-white/10 px-5 py-2 rounded-2xl text-base font-bold border border-white/10 backdrop-blur-md shadow-lg flex items-center gap-2"
                                                     >
-                                                        {p.name}
+                                                        <span>{p.name}</span>
+                                                        {!isViewer && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (confirm(`Remove ${p.name}?`)) {
+                                                                        removeParticipant(p.id);
+                                                                    }
+                                                                }}
+                                                                className="text-red-400 hover:text-red-500 font-bold text-sm leading-none focus:outline-none transition-colors ml-1"
+                                                                title="Remove Player"
+                                                            >
+                                                                &times;
+                                                            </button>
+                                                        )}
                                                     </motion.div>
                                                 ))}
                                             </div>
 
-                                            {!isViewer && true && (
+                                            {!isViewer && canAddPlayer && (
                                                 <motion.button
                                                     whileHover={{ scale: 1.05 }}
                                                     whileTap={{ scale: 0.95 }}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                         const nextIndex = members.length;
-                                                         const playerName = team.players && team.players[nextIndex] && team.players[nextIndex].name
-                                                             ? team.players[nextIndex].name.trim()
-                                                             : `Player ${nextIndex + 1}`;
+                                                        if (canAddPlayer) {
+                                                            const nextIndex = members.length;
+                                                            const playerName = team.players && team.players[nextIndex] && team.players[nextIndex].name
+                                                                ? team.players[nextIndex].name.trim()
+                                                                : `Player ${nextIndex + 1}`;
 
-                                                         registerParticipant(sessionId || 'local', {
-                                                             id: `manual-${team.id}-${Date.now()}`,
-                                                             name: playerName,
-                                                             teamId: team.id,
-                                                             role: 'player',
-                                                             isBuzzed: false
-                                                         });
+                                                            registerParticipant(sessionId || 'local', {
+                                                                id: `manual-${team.id}-${Date.now()}`,
+                                                                name: playerName,
+                                                                teamId: team.id,
+                                                                role: 'player',
+                                                                isBuzzed: false
+                                                            });
+                                                        }
                                                     }}
                                                     className="mt-6 text-yellow-500 hover:text-yellow-400 font-black text-sm uppercase tracking-widest flex items-center gap-2 mx-auto"
                                                 >
@@ -262,23 +302,32 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({
                                 ) : (
                                     isViewer ? (
                                         // TV: show empty team placeholder (no click interaction)
-                                        <div className="h-full flex-1 flex flex-col items-center justify-center opacity-20 border-2 border-dashed border-white/20 rounded-[3rem] p-10">
-                                            <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6">
-                                                <UserPlus size={40} />
+                                        <div className="h-full flex-1 flex flex-col items-center justify-center p-6 border border-white/5 rounded-[3rem] bg-slate-950/20 backdrop-blur-sm">
+                                            <div
+                                                className="w-32 h-32 rounded-full flex items-center justify-center relative mb-6 overflow-visible border-4 border-dashed animate-pulse-slow"
+                                                style={{ backgroundColor: `${team.color}10`, borderColor: `${team.color}30` }}
+                                            >
+                                                <motion.div
+                                                    animate={{ scale: [1, 1.25, 1] }}
+                                                    transition={{ repeat: Infinity, duration: 3.5, ease: "easeInOut" }}
+                                                    className="w-20 h-20 flex items-center justify-center"
+                                                >
+                                                    <TeamIcon iconName={team.emoji} className="w-20 h-20" style={{ color: team.color }} />
+                                                </motion.div>
                                             </div>
-                                            <p className="text-center font-black tracking-[0.2em] text-sm uppercase">WAITING...</p>
+                                            <p className="text-center font-black tracking-[0.2em] text-sm uppercase opacity-40">WAITING...</p>
                                         </div>
                                     ) : (
                                     <motion.button
-                                        whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.05)' }}
+                                        whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.03)' }}
                                         whileTap={{ scale: 0.98 }}
                                         onClick={() => {
-                                            if (true) {
+                                            if (canAddPlayer) {
                                                  const nextIndex = members.length;
                                                  const playerName = team.players && team.players[nextIndex] && team.players[nextIndex].name
                                                      ? team.players[nextIndex].name.trim()
                                                      : `${team.name} Player`;
-
+ 
                                                  registerParticipant(sessionId || 'local', {
                                                      id: `manual-${team.id}-${Date.now()}`,
                                                      name: playerName,
@@ -288,12 +337,21 @@ const SessionLobby: React.FC<SessionLobbyProps> = ({
                                                  });
                                             }
                                         }}
-                                        className="h-full flex-1 flex flex-col items-center justify-center opacity-40 border-2 border-dashed border-white/20 rounded-[3rem] p-10 hover:opacity-100 hover:border-yellow-500/50 transition-all duration-500 group"
+                                        className="h-full flex-1 flex flex-col items-center justify-center p-6 border-2 border-dashed border-white/10 rounded-[3rem] hover:opacity-100 hover:border-yellow-500/30 transition-all duration-500 group w-full"
                                     >
-                                        <div className="w-20 h-20 rounded-full bg-yellow-500/10 flex items-center justify-center mb-6 group-hover:bg-yellow-500 group-hover:text-black transition-colors">
-                                            <UserPlus size={40} />
+                                        <div
+                                            className="w-32 h-32 rounded-full flex items-center justify-center relative mb-6 overflow-visible border-4 border-dashed group-hover:border-yellow-500/50 transition-colors"
+                                            style={{ backgroundColor: `${team.color}15`, borderColor: `${team.color}40` }}
+                                        >
+                                            <motion.div
+                                                animate={{ scale: [1, 1.25, 1] }}
+                                                transition={{ repeat: Infinity, duration: 3.5, ease: "easeInOut" }}
+                                                className="w-20 h-20 flex items-center justify-center"
+                                            >
+                                                <TeamIcon iconName={team.emoji} className="w-20 h-20" style={{ color: team.color }} />
+                                            </motion.div>
                                         </div>
-                                        <p className="text-center font-black tracking-[0.2em] text-sm uppercase group-hover:text-yellow-400">CLICK TO CHECK IN</p>
+                                        <p className="text-center font-black tracking-[0.2em] text-xs uppercase text-slate-500 group-hover:text-yellow-400 transition-colors">CLICK TO CHECK IN</p>
                                     </motion.button>
                                     )
                                 )}

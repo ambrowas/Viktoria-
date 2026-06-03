@@ -133,54 +133,7 @@ const TVScoreOverlay: React.FC<{
           </div>
         )}
 
-        {/* Category + points */}
-        <div className="text-center shrink-0">
-          <p className="text-5xl font-black uppercase text-yellow-300 drop-shadow-lg tracking-wide">{active.category.name}</p>
-          <p className="text-3xl font-bold text-yellow-200 mt-1">{active.question.points} pts</p>
-        </div>
 
-        {/* Team Scores Bar */}
-        {cardView !== "question" && (
-          <div className="flex gap-6 shrink-0 mb-4">
-            {teamLabels.map((_, i) => (
-              <div
-                key={i}
-                className={`transition-all flex items-center gap-4 ${
-                  cardView === "answer"
-                    ? "px-8 py-3.5 rounded-3xl border-4 scale-105"
-                    : "px-6 py-2.5 rounded-2xl border-2"
-                } ${
-                  currentTeamIndex === i
-                    ? "border-yellow-400 bg-yellow-400/20 shadow-lg"
-                    : "border-blue-500/40 bg-blue-900/40"
-                }`}
-              >
-                <span className={`${cardView === "answer" ? "text-2xl" : "text-lg"} font-extrabold text-slate-200`}>{teamLabels[i]}</span>
-                <span className={`${cardView === "answer" ? "text-5xl" : "text-4xl"} font-black text-yellow-300`}>{teamScores[i]}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Score cards */}
-        {cardView === "score" && (
-          <div className="flex gap-6">
-            {teamLabels.map((_, i) => (
-              <div
-                key={i}
-                className={`text-center px-12 py-7 rounded-2xl border-4 shadow-2xl transition-all ${
-                  currentTeamIndex === i
-                    ? "border-yellow-400 bg-yellow-400/20 scale-110"
-                    : "border-blue-500/60 bg-blue-900/60"
-                }`}
-              >
-                <p className="text-xl font-bold text-slate-200 mb-1">{teamLabels[i]}</p>
-                <p className="text-7xl font-black text-yellow-300">{teamScores[i]}</p>
-                <p className="text-sm text-slate-400 mt-1">pts</p>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* Question view */}
         {cardView === "question" && (
@@ -1054,10 +1007,24 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
         {/* Dynamic TV Header Bar displaying team scores and active turn highlight */}
         <header className="flex items-center justify-between px-6 py-4 bg-slate-900/80 backdrop-blur border-b border-blue-900/50 shrink-0">
           <div>
-            <h1 className="text-4xl font-extrabold tracking-widest uppercase bg-gradient-to-r from-yellow-300 to-amber-500 bg-clip-text text-transparent">
-              {game.name || "Jeopardy"}
-            </h1>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Viktoria Game Show</p>
+            {active ? (
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">Categoría / Clue</span>
+                <h1 className="text-3xl font-black uppercase tracking-wide text-yellow-300 drop-shadow-md leading-none">
+                  {active.category.name}
+                </h1>
+                <p className="text-xs font-bold text-yellow-200 uppercase tracking-widest mt-1">
+                  {active.question.points} pts
+                </p>
+              </div>
+            ) : (
+              <div>
+                <h1 className="text-4xl font-extrabold tracking-widest uppercase bg-gradient-to-r from-yellow-300 to-amber-500 bg-clip-text text-transparent">
+                  {game.name || "Jeopardy"}
+                </h1>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Viktoria Game Show</p>
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-6">

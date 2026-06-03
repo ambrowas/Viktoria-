@@ -127,6 +127,15 @@ export async function registerParticipant(sessionId: string, participant: Partia
 }
 
 /**
+ * Removes a participant from the session's participants sub-collection.
+ */
+export async function removeParticipant(sessionId: string, participantId: string): Promise<void> {
+    const participantRef = doc(db, SESSIONS_COLLECTION, sessionId, "participants", participantId);
+    await deleteDoc(participantRef);
+}
+
+
+/**
  * Subscribes to participants in a session.
  */
 export function subscribeToParticipants(sessionId: string, callback: (participants: Participant[]) => void) {

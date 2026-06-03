@@ -8,7 +8,8 @@ import {
     subscribeToSession,
     subscribeToParticipants,
     registerParticipant as fbRegisterParticipant,
-    triggerBuzzer as fbTriggerBuzzer
+    triggerBuzzer as fbTriggerBuzzer,
+    removeParticipant as fbRemoveParticipant
 } from '@/services/syncService';
 const SYNC_VERSION = "1.0.43"; // Cache busting version
 
@@ -25,6 +26,7 @@ interface SyncContextType {
     leaveSession: () => void;
     registerMe: (data: Partial<Participant>) => Promise<void>;
     registerParticipant: (sessionId: string, participant: Partial<Participant> & { id: string }) => Promise<void>;
+    removeParticipant: (participantId: string) => Promise<void>;
     buzzIn: () => Promise<boolean>;
     triggerAudio: (soundId: string) => Promise<void>;
     applyPoints: (teamId: string, points: number) => Promise<void>;
@@ -136,6 +138,14 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const filtered = prev.filter(p => p.id !== data.id);
                 return [...filtered, data as Participant];
             });
+        }
+    }, [sessionId]);
+
+    const removeParticipant = useCallback(async (participantId: string) => {
+        if (sessionId) {
+            await fbRemoveParticipant(sessionId, participantId);
+        } else {
+            setLocalParticipants(prev => prev.filter(p => p.id !== participantId));
         }
     }, [sessionId]);
 
@@ -251,7 +261,7 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
         <SyncContext.Provider value={{
             sessionId, sessionData, participants, isRemoteMode, deviceRole,
             setDeviceRole, startSession, updateSession, joinSession, leaveSession,
-            registerMe, registerParticipant, buzzIn, triggerAudio, applyPoints,
+            registerMe, registerParticipant, removeParticipant, buzzIn, triggerAudio, applyPoints,
             triggerTransition, emergencyMute, syncStatus, version: SYNC_VERSION
         }}>
             {children}
