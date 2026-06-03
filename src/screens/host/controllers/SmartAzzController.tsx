@@ -29,6 +29,7 @@ const SmartAzzController: React.FC<SmartAzzControllerProps> = ({ game, sessionDa
 
     const isFinalRound = sessionData?.currentRoundIndex === ((sessionData?.fullShowData?.rounds?.length || 0) - 1);
     const activeTeams = sessionData?.teams || [];
+    const lang = sessionData?.fullShowData?.settings?.language || sessionData?.settings?.language || 'en';
     const [searchQuery, setSearchQuery] = useState("");
 
     const teamLabel = (index: number) => {
@@ -89,7 +90,10 @@ const SmartAzzController: React.FC<SmartAzzControllerProps> = ({ game, sessionDa
         const newScores = [...(state.scores || [0, 0])];
         const nextGuessedBy = { ...(state.guessedBy || {}), [answer]: state.activeTeam };
 
-        const cat = game.categories.find(c => c.id === state.activeCategoryId);
+        const cat = game.categories.find(c => 
+            c.id === state.activeCategoryId || 
+            c.name?.toLowerCase() === state.activeCategoryId?.toLowerCase()
+        );
         if (cat) {
             const pts = cat.pointValue || 100;
             newScores[state.activeTeam] += pts;
@@ -316,7 +320,10 @@ const SmartAzzController: React.FC<SmartAzzControllerProps> = ({ game, sessionDa
     }
 
     // 3. ACTIVE ROUND CONTROLLER VIEW
-    const activeCategory = game.categories.find(c => c.id === state.activeCategoryId);
+    const activeCategory = game.categories.find(c => 
+        c.id === state.activeCategoryId || 
+        c.name?.toLowerCase() === state.activeCategoryId?.toLowerCase()
+    ) || game.categories[0];
     const answersList = activeCategory?.validAnswers || [];
 
     return (
@@ -508,7 +515,7 @@ const SmartAzzController: React.FC<SmartAzzControllerProps> = ({ game, sessionDa
                         onClick={() => handleTeamFail(state.activeTeam, 'wrong')}
                         className="w-full py-5 rounded-xl bg-red-650 hover:bg-red-550 text-white font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md border border-red-500/20"
                     >
-                        <X size={18} strokeWidth={3} /> NOT IN THE LIST ({teamLabel(state.activeTeam)})
+                        <X size={18} strokeWidth={3} /> {lang === 'es' ? `NO EN LA LISTA - ELIMINAR JUGADOR (${teamLabel(state.activeTeam)})` : `NOT IN THE LIST - ELIMINATE PLAYER (${teamLabel(state.activeTeam)})`}
                     </button>
                 ) : (
                     <div className="flex flex-col gap-2 w-full">

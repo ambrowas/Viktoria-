@@ -140,7 +140,10 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
     eliminationReason?: 'timeout' | 'wrong' | null;
   }) => {
     if (updates.activeCategoryId !== undefined) {
-      const cat = game.categories.find(c => c.id === updates.activeCategoryId) || null;
+      const cat = game.categories.find(c => 
+        c.id === updates.activeCategoryId || 
+        c.name?.toLowerCase() === updates.activeCategoryId?.toLowerCase()
+      ) || null;
       setActiveCategory(cat);
     }
     if (updates.usedCategories !== undefined) setUsedCategories(updates.usedCategories);
@@ -209,7 +212,10 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
   useEffect(() => {
     if (!isSyncActive || !isViewer || !sessionData?.smartAzzState) return;
     const state = sessionData.smartAzzState;
-    const cat = game.categories.find(c => c.id === state.activeCategoryId) || null;
+    const cat = game.categories.find(c => 
+      c.id === state.activeCategoryId || 
+      c.name?.toLowerCase() === state.activeCategoryId?.toLowerCase()
+    ) || null;
     setActiveCategory(cat);
     setUsedCategories(state.usedCategories || []);
     setScores(state.scores as [number, number] || [0, 0]);
@@ -816,7 +822,7 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
                         color: teams?.[0]?.color || '#22c55e',
                       }}
                     >
-                      Eliminated
+                      {lang === 'es' ? 'Eliminar Jugador' : 'Eliminate Player'}
                     </button>
                   )}
                   {/* Team A Guessed Answers List */}
@@ -907,7 +913,7 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
                         color: teams?.[1]?.color || '#3b82f6',
                       }}
                     >
-                      Eliminated
+                      {lang === 'es' ? 'Eliminar Jugador' : 'Eliminate Player'}
                     </button>
                   )}
                   {/* Team B Guessed Answers List */}
@@ -958,7 +964,7 @@ const SmartAzzGameScreen: React.FC<SmartAzzGameProps> = ({
                   </h1>
 
                   <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-wider mb-8">
-                    {teamLabel(activeTeam)} {lang === 'es' ? "ELIMINADO" : "ELIMINATED"}
+                    {teamLabel(activeTeam)} - {lang === 'es' ? "JUGADOR ELIMINADO" : "PLAYER ELIMINATED"}
                   </h2>
 
                   {activeCategory.explanation && (
