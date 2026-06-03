@@ -104,34 +104,7 @@ const TVScoreOverlay: React.FC<{
   return (
     <div className="absolute inset-0 flex items-center justify-center z-20 bg-slate-950/90 backdrop-blur-md pointer-events-none">
       <div className="flex flex-col items-center gap-4 w-full max-w-[95vw] p-6 h-full max-h-[92vh] justify-center pointer-events-auto relative overflow-hidden">
-        {/* Absolute Timer in Top Right */}
-        {cardView === "question" && (
-          <div className="absolute top-6 right-8 flex items-center gap-4 z-30 bg-blue-950/95 border-2 border-blue-500/40 px-6 py-3.5 rounded-2xl shadow-2xl shrink-0">
-            {activeClue && (
-              <div className="flex items-center gap-2 bg-blue-500/25 border border-blue-400/40 px-4 py-2 rounded-xl text-blue-200 text-xs font-black uppercase tracking-wider animate-pulse mr-2 shrink-0">
-                <span className="text-base">💡</span>
-                <span>
-                  {activeClue.type === "CALL_FRIEND" && "Call Friend"}
-                  {activeClue.type === "ASK_HOST" && "Ask Host"}
-                  {activeClue.type === "ASK_OTHER_TEAM" && "Ask Team"}
-                </span>
-              </div>
-            )}
-            <div className="flex flex-col items-center">
-              <span className="text-xs font-black uppercase tracking-wider text-slate-300">Time</span>
-              <span className={`text-6xl font-black tabular-nums transition-colors ${timeLeft <= 5 ? "text-red-400 animate-pulse" : "text-yellow-300"}`}>
-                {timeLeft}
-              </span>
-            </div>
-            {/* Tiny progress bar */}
-            <div className="w-24 h-2.5 bg-blue-900 rounded-full overflow-hidden border border-blue-700/60 shrink-0">
-              <div
-                className={`h-full rounded-full transition-all duration-1000 ${timeLeft <= 5 ? "bg-red-500" : "bg-yellow-400"}`}
-                style={{ width: `${(timeLeft / TIMER_DURATION) * 100}%` }}
-              />
-            </div>
-          </div>
-        )}
+
 
 
 
@@ -1006,16 +979,43 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
       <div className="h-full flex flex-col bg-gradient-to-b from-blue-950 to-slate-900 text-white relative overflow-hidden">
         {/* Dynamic TV Header Bar displaying team scores and active turn highlight */}
         <header className="flex items-center justify-between px-6 py-4 bg-slate-900/80 backdrop-blur border-b border-blue-900/50 shrink-0">
-          <div>
+          <div className="flex items-center gap-6">
             {active ? (
-              <div className="flex flex-col text-left">
-                <span className="text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">Categoría / Clue</span>
-                <h1 className="text-3xl font-black uppercase tracking-wide text-yellow-300 drop-shadow-md leading-none">
-                  {active.category.name}
-                </h1>
-                <p className="text-xs font-bold text-yellow-200 uppercase tracking-widest mt-1">
-                  {active.question.points} pts
-                </p>
+              <div className="flex items-center gap-6">
+                {/* Timer (if cardView is question) */}
+                {cardView === "question" && (
+                  <div className="flex items-center gap-3 bg-blue-950/60 border border-blue-500/30 px-4 py-2 rounded-2xl shadow-lg shrink-0">
+                    {activeClue && (
+                      <div className="flex items-center gap-1.5 bg-blue-500/20 border border-blue-400/30 px-2.5 py-1 rounded-xl text-blue-200 text-[10px] font-black uppercase tracking-wider animate-pulse">
+                        <span>💡</span>
+                        <span>
+                          {activeClue.type === "CALL_FRIEND" && "Friend"}
+                          {activeClue.type === "ASK_HOST" && "Host"}
+                          {activeClue.type === "ASK_OTHER_TEAM" && "Team"}
+                        </span>
+                      </div>
+                    )}
+                    <span className={`text-3xl font-black tabular-nums leading-none ${timeLeft <= 5 ? "text-red-400 animate-pulse" : "text-yellow-300"}`}>
+                      {timeLeft}
+                    </span>
+                    <div className="w-16 h-2 bg-blue-900 rounded-full overflow-hidden border border-blue-700/40">
+                      <div
+                        className={`h-full rounded-full transition-all duration-1000 ${timeLeft <= 5 ? "bg-red-500" : "bg-yellow-400"}`}
+                        style={{ width: `${(timeLeft / TIMER_DURATION) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col text-left">
+                  <span className="text-[9px] text-slate-400 uppercase tracking-widest leading-none mb-1">Categoría / Clue</span>
+                  <h1 className="text-3xl font-black uppercase tracking-wide text-yellow-300 drop-shadow-md leading-none">
+                    {active.category.name}
+                  </h1>
+                  <p className="text-xs font-bold text-yellow-200 uppercase tracking-widest mt-1">
+                    {active.question.points} pts
+                  </p>
+                </div>
               </div>
             ) : (
               <div>
