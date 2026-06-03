@@ -150,12 +150,6 @@ const TVScoreOverlay: React.FC<{
                       <p className="text-amber-100 font-bold text-lg">Rebound! {teamLabels[currentTeamIndex]} gets a chance to answer.</p>
                     </div>
                   )}
-
-                  {!activeClue && !hasReboundAttempted && (
-                    <div className="bg-blue-900/40 rounded-full px-5 py-1.5 border border-blue-500/30 text-yellow-300 font-bold text-lg animate-pulse shrink-0">
-                      Turn: {teamLabels[currentTeamIndex]}
-                    </div>
-                  )}
                 </div>
               </div>
             ) : (
@@ -178,12 +172,6 @@ const TVScoreOverlay: React.FC<{
                 {hasReboundAttempted && !activeClue && (
                   <div className="bg-amber-900/50 rounded-xl p-3 border border-amber-500/40 w-full text-center animate-fade-in shrink-0">
                     <p className="text-amber-100 font-bold text-xl">Rebound! {teamLabels[currentTeamIndex]} gets a chance to answer.</p>
-                  </div>
-                )}
-
-                {!activeClue && !hasReboundAttempted && (
-                  <div className="bg-blue-900/40 rounded-full px-6 py-2 border border-blue-500/30 text-yellow-300 font-bold text-xl animate-pulse shrink-0">
-                    Turn: {teamLabels[currentTeamIndex]}
                   </div>
                 )}
               </div>
@@ -982,9 +970,19 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
           <div className="flex items-center gap-6">
             {active ? (
               <div className="flex items-center gap-6">
+                <div className="flex flex-col text-left">
+                  <span className="text-[9px] text-slate-400 uppercase tracking-widest leading-none mb-1">Category / Clue</span>
+                  <h1 className="text-3xl font-black uppercase tracking-wide text-yellow-300 drop-shadow-md leading-none">
+                    {active.category.name}
+                  </h1>
+                  <p className="text-xs font-bold text-yellow-200 uppercase tracking-widest mt-1">
+                    {active.question.points} pts
+                  </p>
+                </div>
+
                 {/* Timer (if cardView is question) */}
                 {cardView === "question" && (
-                  <div className="flex items-center gap-3 bg-blue-950/60 border border-blue-500/30 px-4 py-2 rounded-2xl shadow-lg shrink-0">
+                  <div className="flex items-center gap-4 bg-blue-950/60 border border-blue-500/30 px-5 py-3 rounded-2xl shadow-lg shrink-0">
                     {activeClue && (
                       <div className="flex items-center gap-1.5 bg-blue-500/20 border border-blue-400/30 px-2.5 py-1 rounded-xl text-blue-200 text-[10px] font-black uppercase tracking-wider animate-pulse">
                         <span>💡</span>
@@ -995,10 +993,10 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
                         </span>
                       </div>
                     )}
-                    <span className={`text-3xl font-black tabular-nums leading-none ${timeLeft <= 5 ? "text-red-400 animate-pulse" : "text-yellow-300"}`}>
+                    <span className={`text-5xl font-black tabular-nums leading-none ${timeLeft <= 5 ? "text-red-400 animate-pulse" : "text-yellow-300"}`}>
                       {timeLeft}
                     </span>
-                    <div className="w-16 h-2 bg-blue-900 rounded-full overflow-hidden border border-blue-700/40">
+                    <div className="w-28 h-3 bg-blue-900 rounded-full overflow-hidden border border-blue-700/40">
                       <div
                         className={`h-full rounded-full transition-all duration-1000 ${timeLeft <= 5 ? "bg-red-500" : "bg-yellow-400"}`}
                         style={{ width: `${(timeLeft / TIMER_DURATION) * 100}%` }}
@@ -1006,16 +1004,6 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, onRetur
                     </div>
                   </div>
                 )}
-
-                <div className="flex flex-col text-left">
-                  <span className="text-[9px] text-slate-400 uppercase tracking-widest leading-none mb-1">Categoría / Clue</span>
-                  <h1 className="text-3xl font-black uppercase tracking-wide text-yellow-300 drop-shadow-md leading-none">
-                    {active.category.name}
-                  </h1>
-                  <p className="text-xs font-bold text-yellow-200 uppercase tracking-widest mt-1">
-                    {active.question.points} pts
-                  </p>
-                </div>
               </div>
             ) : (
               <div>
