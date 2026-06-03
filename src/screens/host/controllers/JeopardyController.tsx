@@ -42,12 +42,13 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
         });
     };
 
-    const handleAction = (action: 'correct' | 'wrong' | 'show_answer') => {
+    const handleAction = (action: 'correct' | 'wrong' | 'show_answer' | 'feedback_continue') => {
         // These will be picked up by the PC as commands or state changes
         updateSession({
             hostCommand: {
                 type: action,
-                payload: { teamIndex: sessionData.currentTeamIndex }
+                payload: { teamIndex: sessionData.currentTeamIndex },
+                timestamp: Date.now()
             },
             // If revealing, update state
             ...(action === 'show_answer' ? { isAnswerRevealed: true } : {})
@@ -121,29 +122,40 @@ const JeopardyController: React.FC<JeopardyControllerProps> = ({ game, sessionDa
                             <p className="text-2xl font-black text-white">{(activeQuestion as JeopardyQuestion).correctAnswer}</p>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-4 pt-4">
-                            <button
-                                onClick={() => handleAction('wrong')}
-                                className="bg-red-500/10 text-red-500 border border-red-500/30 p-6 rounded-2xl font-black flex flex-col items-center gap-3 hover:bg-red-500/20 active:scale-95 transition-all"
-                            >
-                                <XCircle size={32} /> FAIL
-                            </button>
-                            <button
-                                onClick={() => handleAction('show_answer')}
-                                className={`p-6 rounded-2xl font-black flex flex-col items-center gap-3 active:scale-95 transition-all border ${sessionData.isAnswerRevealed
-                                    ? 'bg-[#fca311] text-black border-[#fca311] glow-orange-active'
-                                    : 'bg-white/5 text-[#fca311] border-[#fca311]/30 hover:bg-white/10'
-                                    }`}
-                            >
-                                <Eye size={32} /> {sessionData.isAnswerRevealed ? 'REVEALED' : 'REVEAL'}
-                            </button>
-                            <button
-                                onClick={() => handleAction('correct')}
-                                className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 p-6 rounded-2xl font-black flex flex-col items-center gap-3 hover:bg-emerald-500/20 active:scale-95 transition-all"
-                            >
-                                <CheckCircle size={32} /> SUCCESS
-                            </button>
-                        </div>
+                        {sessionData.feedback ? (
+                            <div className="pt-4">
+                                <button
+                                    onClick={() => handleAction('feedback_continue')}
+                                    className="w-full bg-[#fca311] text-black hover:bg-[#fca311]/90 p-8 rounded-3xl font-black text-xl flex flex-col items-center justify-center gap-2 shadow-2xl active:scale-95 transition-all glow-orange-active border-2 border-yellow-400 animate-pulse"
+                                >
+                                    <CheckCircle size={36} /> CONTINUE / CONTINUAR
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-3 gap-4 pt-4">
+                                <button
+                                    onClick={() => handleAction('wrong')}
+                                    className="bg-red-500/10 text-red-500 border border-red-500/30 p-6 rounded-2xl font-black flex flex-col items-center gap-3 hover:bg-red-500/20 active:scale-95 transition-all"
+                                >
+                                    <XCircle size={32} /> FAIL
+                                </button>
+                                <button
+                                    onClick={() => handleAction('show_answer')}
+                                    className={`p-6 rounded-2xl font-black flex flex-col items-center gap-3 active:scale-95 transition-all border ${sessionData.isAnswerRevealed
+                                        ? 'bg-[#fca311] text-black border-[#fca311] glow-orange-active'
+                                        : 'bg-white/5 text-[#fca311] border-[#fca311]/30 hover:bg-white/10'
+                                        }`}
+                                >
+                                    <Eye size={32} /> {sessionData.isAnswerRevealed ? 'REVEALED' : 'REVEAL'}
+                                </button>
+                                <button
+                                    onClick={() => handleAction('correct')}
+                                    className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 p-6 rounded-2xl font-black flex flex-col items-center gap-3 hover:bg-emerald-500/20 active:scale-95 transition-all"
+                                >
+                                    <CheckCircle size={32} /> SUCCESS
+                                </button>
+                            </div>
+                        )}
 
                         {/* Team Selection Glow */}
                         <div className="flex gap-4 p-4 bg-white/5 rounded-3xl border border-white/5">

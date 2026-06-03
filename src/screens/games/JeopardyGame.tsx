@@ -3,6 +3,7 @@ import { JeopardyGame, JeopardyCategory, JeopardyQuestion, JeopardyTurnMode } fr
 import { useSync } from "@/context/SyncContext";
 import { correctSound, wrongSound, timerSound } from "@/utils/sound";
 import { resolveMediaUrl } from "@/utils/media";
+import { useLanguage } from "@/context/LanguageContext";
 
 const TIMER_DURATION = 30;
 const CARD_BACK_IMG = resolveMediaUrl("images/TADTSlogo.jpg");
@@ -362,6 +363,7 @@ const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" | null; correctAnswe
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewer = false }) => {
   const { sessionData, updateSession, isRemoteMode } = useSync();
+  const { lang } = useLanguage();
 
   const [active, setActive] = useState<{ category: JeopardyCategory; question: JeopardyQuestion } | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -376,6 +378,7 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
   const [activeClue, setActiveClue] = useState<ActiveClueState | null>(null);
   const [showClueMenu, setShowClueMenu] = useState(false);
   const [canFlashTimerButton, setCanFlashTimerButton] = useState(false);
+  const feedbackCallbackRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     setCanFlashTimerButton(false);
@@ -492,7 +495,15 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     if (type === "correct") handleCorrect();
     else if (type === "wrong") handleWrong();
     else if (type === "show_answer" || type === "REVEAL_ANSWER") setShowAnswer(true);
+    else if (type === "feedback_continue") handleFeedbackContinue();
   }, [sessionData?.hostCommand, isRemoteMode]);
+
+  // Sync feedback state to Firebase remote session
+  useEffect(() => {
+    if (isRemoteMode) {
+      updateSession({ feedback });
+    }
+  }, [feedback, isRemoteMode]);
 
   // ── Timer ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -570,17 +581,25 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     type: "correct" | "wrong",
     options?: { closeAfter?: boolean; durationMs?: number; onComplete?: () => void }
   ) => {
-    const { closeAfter = true, durationMs = 2000, onComplete } = options || {};
+    const { closeAfter = true, onComplete } = options || {};
     setFeedback(type);
     if (type === "correct") correctSound.play(); else wrongSound.play();
-    setTimeout(() => {
+
+    // Save completion callback to run when Host clicks "Continue"
+    feedbackCallbackRef.current = () => {
       setFeedback(null);
       if (onComplete) {
         onComplete();
       } else if (closeAfter) {
         clearQuestionState();
       }
-    }, durationMs);
+    };
+  };
+
+  const handleFeedbackContinue = () => {
+    if (feedbackCallbackRef.current) {
+      feedbackCallbackRef.current();
+    }
   };
 
   const advanceTurnAfterResolution = (result: "correct" | "wrong", basis: 0 | 1) => {
@@ -610,7 +629,6 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
       const hasExplanation = !!active.question.explanation?.trim();
       showFeedback("correct", {
         closeAfter: !hasExplanation,
-        durationMs: 2000,
         onComplete: hasExplanation
           ? () => {
               setCardView("answer");
@@ -634,7 +652,6 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     const hasExplanation = !!active.question.explanation?.trim();
     showFeedback("correct", {
       closeAfter: !hasExplanation,
-      durationMs: 2000,
       onComplete: hasExplanation
         ? () => {
             setCardView("answer");
@@ -666,8 +683,13 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
       setCurrentTeamIndex(nextTeam);
       setIsTimerRunning(false);
       setTimeLeft(TIMER_DURATION);
-      setIsTimerRunning(true);
-      showFeedback("wrong", { closeAfter: false, durationMs: 1200 });
+      showFeedback("wrong", {
+        closeAfter: false,
+        onComplete: () => {
+          setIsTimerRunning(true);
+          if (isRemoteMode) updateSession({ isTimerRunning: true });
+        }
+      });
       if (isRemoteMode) updateSession({ currentTeamIndex: nextTeam, hasReboundAttempted: true });
       return;
     }
@@ -678,7 +700,6 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
     const turnBasis = activeClue?.type === "ASK_OTHER_TEAM" ? activeClue.usedBy : currentTeamIndex;
     showFeedback("wrong", {
       closeAfter: true,
-      durationMs: 3000,
       onComplete: () => {
         advanceTurnAfterResolution("wrong", turnBasis);
         clearQuestionState();
@@ -750,13 +771,20 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!active || isViewer) return;
+      if (feedback) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleFeedbackContinue();
+        }
+        return;
+      }
       if (e.key === "r" || e.key === "R") { e.preventDefault(); handleCorrect(); }
       if (e.key === "w" || e.key === "W") { e.preventDefault(); handleWrong(); }
       if (e.key === " ") { e.preventDefault(); setIsTimerRunning(v => !v); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, currentTeamIndex, isViewer]);
+  }, [active, currentTeamIndex, isViewer, feedback]);
 
   // ── TV RENDER: board always visible, overlay on top ───────────────────────
   if (isViewer) {
@@ -1091,7 +1119,14 @@ const JeopardyGameScreen: React.FC<JeopardyGameProps> = ({ game, onExit, isViewe
                     </button>
                   </div>
                 </div>
-                {showAnswer ? (
+                {feedback ? (
+                  <button
+                    onClick={handleFeedbackContinue}
+                    className="px-8 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 text-xl shadow-lg ring-4 ring-blue-400 animate-pulse"
+                  >
+                    {lang === "es" ? "Continuar" : "Continue"}
+                  </button>
+                ) : showAnswer ? (
                   <button
                     onClick={clearQuestionState}
                     className="px-8 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 text-xl shadow-lg ring-4 ring-blue-400 animate-pulse"
