@@ -113,7 +113,32 @@ const DefinitionsEditor: React.FC<DefinitionsEditorProps> = ({ game, setGame }) 
         <p className="text-gray-400">{t.subtitle}</p>
       </header>
 
-      {/* AI Generator */}
+      {/* Configuración de Concursante */}
+      <div className="bg-base-200 p-6 rounded-lg shadow-md space-y-4">
+        <h3 className="text-xl font-semibold mb-3">👤 Concursante Predeterminado</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Nombre del Jugador</label>
+            <input
+              type="text"
+              placeholder="Ej: Juan Pérez"
+              value={game.playerName || ""}
+              onChange={(e) => updateGame({ playerName: e.target.value })}
+              className="w-full bg-base-300 p-3 rounded-lg text-white"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Equipo / Afiliación</label>
+            <input
+              type="text"
+              placeholder="Ej: Equipo Azul"
+              value={game.playerTeamName || ""}
+              onChange={(e) => updateGame({ playerTeamName: e.target.value })}
+              className="w-full bg-base-300 p-3 rounded-lg text-white"
+            />
+          </div>
+        </div>
+      </div>
       <div className="bg-base-200 p-6 rounded-lg shadow-md">
         <h3 className="text-xl font-semibold mb-3">🤖 {t.generate}</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">

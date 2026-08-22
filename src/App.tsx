@@ -795,6 +795,7 @@ const App: React.FC = () => {
           game={activeQuickPlay.game}
           teams={activeQuickPlay.teams}
           onExit={handleExitQuickPlay}
+          isViewer={isLocalSyncViewer}
         />
       );
     }
@@ -819,6 +820,7 @@ const App: React.FC = () => {
           teams={[]}
           teamScores={{}}
           onScoreChange={() => { }}
+          isViewer={isLocalSyncViewer}
         />
       );
     }

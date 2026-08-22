@@ -310,9 +310,9 @@ const FeedbackOverlay: React.FC<{ type: "correct" | "wrong" | null; correctAnswe
         <h2 className="text-5xl font-black uppercase tracking-wide mt-2 max-w-4xl leading-snug">
           {isCorrect ? "Correct!" : isRebound ? "REBOUND!" : "YOU HAVE THE WRONG ANSWER"}
         </h2>
-        {!isCorrect && correctAnswer && (
-          <p className="text-3xl font-extrabold uppercase tracking-wide text-red-200 mt-2 max-w-4xl leading-relaxed">
-            THE CORRECT ANSWER IS: <span className="text-white font-black underline decoration-red-500 decoration-4 block mt-2 text-4xl">{correctAnswer}</span>
+        {correctAnswer && (
+          <p className={`text-3xl font-extrabold uppercase tracking-wide mt-2 max-w-4xl leading-relaxed ${isCorrect ? "text-emerald-200" : "text-red-200"}`}>
+            THE CORRECT ANSWER IS: <span className={`text-white font-black underline decoration-4 block mt-2 text-4xl ${isCorrect ? "decoration-emerald-500" : "decoration-red-500"}`}>{correctAnswer}</span>
           </p>
         )}
       </div>
@@ -475,11 +475,15 @@ const QuizBoardGameScreen: React.FC<QuizBoardGameProps> = ({ game, onExit, onRet
 
   useEffect(() => {
     if (isViewer) return;
+    console.log("🧩 [QUIZBOARD BC] Creating Host BroadcastChannel:", QUIZBOARD_BC);
     const bc = new BroadcastChannel(QUIZBOARD_BC);
     bcRef.current = bc;
+
     bc.onmessage = (ev) => {
+      console.log("🧩 [QUIZBOARD BC] Host received message:", ev.data);
       if (ev.data?.type === "REQUEST_STATE") {
         const s = latestRef.current;
+        console.log("🧩 [QUIZBOARD BC] Host responding to REQUEST_STATE with snapshot:", s);
         bc.postMessage({
           type: "STATE_UPDATE",
           active: s.active, showAnswer: s.showAnswer, cardView: s.cardView,
@@ -492,29 +496,37 @@ const QuizBoardGameScreen: React.FC<QuizBoardGameProps> = ({ game, onExit, onRet
         });
       }
     };
-    return () => { bc.close(); bcRef.current = null; };
+
+    return () => {
+      console.log("🧩 [QUIZBOARD BC] Closing Host BroadcastChannel");
+      bc.close();
+      bcRef.current = null;
+    };
   }, [isViewer]);
 
   // Broadcast every state change to TV
   useEffect(() => {
-    if (isViewer || !bcRef.current) return;
+    if (!bcRef.current) return;
+    console.log("🧩 [QUIZBOARD BC] Host broadcasting STATE_UPDATE:", { active, showAnswer, cardView, timeLeft });
     bcRef.current.postMessage({
       type: "STATE_UPDATE",
       active, showAnswer, cardView,
       usedIds: Array.from(usedIds), currentTeamIndex,
-      teamScores, timeLeft, isTimerRunning,
-      activeClue, hasReboundAttempted,
-      feedback,
+      teamScores, timeLeft, isTimerRunning, activeClue,
+      hasReboundAttempted, feedback,
       revealAnswerInFeedback,
       attemptedTeamIndices
     });
-  }, [isViewer, active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback, revealAnswerInFeedback, attemptedTeamIndices]);
+  }, [active, showAnswer, cardView, usedIds, currentTeamIndex, teamScores, timeLeft, isTimerRunning, activeClue, hasReboundAttempted, feedback, revealAnswerInFeedback, attemptedTeamIndices]);
 
   // ── TV: receive from PC ───────────────────────────────────────────────────
   useEffect(() => {
+    console.log("🧩 [QUIZBOARD BC] TV Listener effect. isViewer:", isViewer);
     if (!isViewer) return;
-    const bc = new BroadcastChannel(QUIZBOARD_BC);
-    bc.onmessage = (ev) => {
+    console.log("🧩 [QUIZBOARD BC] Creating TV BroadcastChannel listener:", QUIZBOARD_BC);
+    const tvBc = new BroadcastChannel(QUIZBOARD_BC);
+    tvBc.onmessage = (ev) => {
+      console.log("🧩 [QUIZBOARD BC] TV received message:", ev.data);
       const { type: t, active: a, showAnswer: sa, cardView: cv, usedIds: ui, currentTeamIndex: ct, teamScores: ts, timeLeft: tl, activeClue: ac, hasReboundAttempted: hr, feedback: fb, revealAnswerInFeedback: raf, attemptedTeamIndices: ati } = ev.data;
       if (t === "STATE_UPDATE") {
         if (a !== undefined) setActive(a);
@@ -531,8 +543,12 @@ const QuizBoardGameScreen: React.FC<QuizBoardGameProps> = ({ game, onExit, onRet
         if (ati !== undefined) setAttemptedTeamIndices(ati);
       }
     };
-    bc.postMessage({ type: "REQUEST_STATE" });
-    return () => bc.close();
+    console.log("🧩 [QUIZBOARD BC] TV requesting state on mount");
+    tvBc.postMessage({ type: "REQUEST_STATE" });
+    return () => {
+      console.log("🧩 [QUIZBOARD BC] Closing TV BroadcastChannel");
+      tvBc.close();
+    };
   }, [isViewer]);
 
   // ── Firebase remote sync ──────────────────────────────────────────────────
@@ -805,6 +821,7 @@ const QuizBoardGameScreen: React.FC<QuizBoardGameProps> = ({ game, onExit, onRet
       showFeedback("correct", {
         closeAfter: !hasExplanation,
         nextStep: hasExplanation ? "explanation" : "grid",
+        revealAnswer: true,
         onComplete: hasExplanation
           ? () => {
               setCardView("answer");
@@ -834,6 +851,7 @@ const QuizBoardGameScreen: React.FC<QuizBoardGameProps> = ({ game, onExit, onRet
     showFeedback("correct", {
       closeAfter: !hasExplanation,
       nextStep: hasExplanation ? "explanation" : "grid",
+      revealAnswer: true,
       onComplete: hasExplanation
         ? () => {
             setCardView("answer");

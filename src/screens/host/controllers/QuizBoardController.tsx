@@ -198,9 +198,9 @@ const QuizBoardController: React.FC<QuizBoardControllerProps> = ({ game, session
                                     <h3 className="text-xl font-black uppercase tracking-wider">
                                         {sessionData.feedback === 'correct' ? 'SUCCESS / ¡CORRECTO!' : 'FAIL / ¡INCORRECTO!'}
                                     </h3>
-                                    {sessionData.feedback === 'wrong' && (
+                                    {activeQuestion?.correctAnswer && (
                                         <p className="text-sm font-bold text-slate-300 mt-2">
-                                            Correct Answer: <span className="text-white underline">{activeQuestion?.correctAnswer}</span>
+                                            Correct Answer: <span className="text-white underline">{(activeQuestion as QuizBoardQuestion).correctAnswer}</span>
                                         </p>
                                     )}
                                 </div>

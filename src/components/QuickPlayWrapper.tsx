@@ -11,12 +11,13 @@ interface QuickPlayWrapperProps {
     game: Game;
     teams: Team[];
     onExit: () => void;
+    isViewer?: boolean;
 }
 
 const TEAM_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#f97316", "#14b8a6"];
 const TEAM_ICONS = ["flame", "zap", "star", "brain", "rocket", "target", "music", "gamepad", "trophy", "crown"];
 
-export default function QuickPlayWrapper({ game, teams: initialTeams, onExit }: QuickPlayWrapperProps) {
+export default function QuickPlayWrapper({ game, teams: initialTeams, onExit, isViewer = false }: QuickPlayWrapperProps) {
     const { updateSession, startSession, leaveSession, isRemoteMode } = useSync();
 
     const [teams, setTeams] = useState<Team[]>(initialTeams);
@@ -82,6 +83,23 @@ export default function QuickPlayWrapper({ game, teams: initialTeams, onExit }: 
             t.id === teamId ? { ...t, name } : t
         ));
     };
+
+    if (isViewer) {
+        return (
+            <div className="relative h-screen w-screen overflow-hidden bg-black">
+                <GameRouter
+                    game={game}
+                    onExit={onExit}
+                    teams={teams}
+                    teamScores={Object.fromEntries(teams.map(t => [t.id, t.score]))}
+                    onScoreChange={(teamId, score) => {
+                        setTeams(prev => prev.map(t => t.id === teamId ? { ...t, score } : t));
+                    }}
+                    isViewer={true}
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="relative h-screen w-screen overflow-hidden bg-black">

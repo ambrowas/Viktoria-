@@ -205,6 +205,9 @@ export interface DefinitionClue {
 export interface DefinitionsGame extends GameBase {
   type: GameType.DEFINITIONS;
   clues: DefinitionClue[];
+  playerName?: string;
+  playerTeamId?: string;
+  playerTeamName?: string;
 }
 // -----------------------------
 // The Price Is Right

@@ -947,42 +947,137 @@ const PreviewModal: React.FC<{ game: QuizBoardGame; onClose: () => void; onOpenC
   game,
   onClose,
   onOpenClue,
-}) => (
-  <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-    <div className="bg-base-100 p-8 rounded-lg shadow-2xl w-full max-w-6xl overflow-y-auto">
-      <h2 className="text-3xl font-bold mb-4">Preview Mode</h2>
-      <div
-        className="grid gap-2"
-        style={{ gridTemplateColumns: `repeat(${game.categories.length}, minmax(180px, 1fr))` }}
-      >
-        {game.categories.map((cat) => (
-          <div key={cat.id}>
-            <div className="bg-base-300 text-white p-2 rounded-t-lg text-center font-bold uppercase">
-              {cat.name}
-            </div>
-            {cat.questions.map((q) => (
-              <button
-                key={q.id}
-                onClick={() => onOpenClue(cat.id, q.id)}
-                title={`Open ${cat.name} — $${q.points}`}
-                className="bg-brand-primary text-black h-20 w-full font-bold text-2xl m-1 rounded-lg hover:brightness-95"
-              >
-                ${q.points}
-              </button>
-            ))}
+}) => {
+  const [displayMode, setDisplayMode] = useState<"amount" | "question" | "answer">("amount");
+  const [showMedia, setShowMedia] = useState(true);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 p-2 md:p-4 backdrop-blur-sm">
+      <div className="bg-slate-900 border border-slate-700 p-6 md:p-8 rounded-2xl shadow-2xl w-full max-w-[95vw] overflow-y-auto max-h-[95vh] flex flex-col gap-6 text-white">
+        
+        {/* Header with Title and Controls */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-700">
+          <div>
+            <h2 className="text-3xl font-black uppercase text-yellow-500 tracking-tight">Preview Mode</h2>
+            <p className="text-xs text-slate-400 mt-1">Review board questions, answers, and media files.</p>
           </div>
-        ))}
+          
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Display Mode Segmented Control */}
+            <div className="bg-slate-800 p-1 rounded-xl flex gap-1 border border-slate-700">
+              {(["amount", "question", "answer"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setDisplayMode(mode)}
+                  className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                    displayMode === mode
+                      ? "bg-blue-600 text-white shadow"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+
+            {/* Media Content Toggle */}
+            <label className="flex items-center gap-2 cursor-pointer bg-slate-800 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-white transition-colors">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-primary checkbox-xs rounded bg-slate-900 border-slate-600"
+                checked={showMedia}
+                onChange={(e) => setShowMedia(e.target.checked)}
+              />
+              <span>Show Media</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Board Grid */}
+        <div
+          className="grid gap-4 flex-1"
+          style={{ gridTemplateColumns: `repeat(${game.categories.length}, minmax(180px, 1fr))` }}
+        >
+          {game.categories.map((cat) => (
+            <div key={cat.id} className="flex flex-col gap-3 bg-slate-950/40 p-3 border border-slate-800 rounded-xl">
+              <div className="bg-slate-800 text-yellow-300 p-3 rounded-lg text-center font-black uppercase tracking-wider border border-slate-700/50 text-sm truncate">
+                {cat.name}
+              </div>
+              {cat.questions.map((q) => {
+                let content: React.ReactNode = "";
+                let hasMedia = false;
+                let mediaUrl = "";
+                let mediaType: "IMAGE" | "AUDIO" | "VIDEO" | undefined = undefined;
+
+                if (displayMode === "amount") {
+                  content = `$${q.points}`;
+                } else if (displayMode === "question") {
+                  content = q.question || "—";
+                  if (q.questionMediaUrl && q.questionMediaType) {
+                    hasMedia = true;
+                    mediaUrl = q.questionMediaUrl;
+                    mediaType = q.questionMediaType;
+                  }
+                } else if (displayMode === "answer") {
+                  content = q.correctAnswer || "—";
+                  if (q.answerMediaUrl && q.answerMediaType) {
+                    hasMedia = true;
+                    mediaUrl = q.answerMediaUrl;
+                    mediaType = q.answerMediaType;
+                  }
+                }
+
+                return (
+                  <button
+                    key={q.id}
+                    onClick={() => onOpenClue(cat.id, q.id)}
+                    title={`Edit ${cat.name} — $${q.points}`}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-lg hover:scale-[1.02] active:scale-95 transition-all p-4 min-h-[100px] flex flex-col items-center justify-center text-center gap-2 border border-blue-500/30 shadow-md group relative overflow-hidden"
+                  >
+                    <span className={`line-clamp-3 text-white ${displayMode === "amount" ? "text-2xl" : "text-xs font-semibold"}`}>
+                      {content}
+                    </span>
+
+                    {hasMedia && showMedia && (
+                      <div className="mt-2 w-full max-h-16 flex justify-center items-center overflow-hidden rounded bg-slate-950/60 p-1 border border-white/10 shrink-0">
+                        {mediaType === "IMAGE" && (
+                          <img
+                            src={resolveMediaUrl(mediaUrl)}
+                            alt="Preview Thumbnail"
+                            className="max-h-12 max-w-full object-contain"
+                          />
+                        )}
+                        {mediaType === "AUDIO" && (
+                          <div className="text-[10px] text-blue-300 flex items-center gap-1">
+                            <span>🔊</span> Audio
+                          </div>
+                        )}
+                        {mediaType === "VIDEO" && (
+                          <div className="text-[10px] text-yellow-300 flex items-center gap-1">
+                            <span>🎥</span> Video
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        {/* Exit Button */}
+        <button
+          onClick={onClose}
+          title="Exit preview"
+          className="bg-red-600/90 text-white py-3.5 rounded-xl font-bold hover:bg-red-700 transition-colors uppercase tracking-widest text-xs shadow-lg active:scale-98"
+        >
+          Exit Preview
+        </button>
       </div>
-      <button
-        onClick={onClose}
-        title="Exit preview"
-        className="mt-6 w-full bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700"
-      >
-        Exit Preview
-      </button>
     </div>
-  </div>
-);
+  );
+};
 
 /* =========================
    Main Editor
@@ -1425,26 +1520,28 @@ const QuizBoardEditor: React.FC<QuizBoardEditorProps> = ({ game, setGame }) => {
 	                        return (
 	                          <Draggable key={q.id} draggableId={q.id} index={index}>
 	                            {(dragProvided, snapshot) => (
-	                              <button
-	                                ref={dragProvided.innerRef}
-	                                {...dragProvided.draggableProps}
-	                                {...dragProvided.dragHandleProps}
-	                                onClick={() =>
-	                                  setEditing({ categoryId: cat.id, questionId: q.id })
-	                                }
-	                                aria-label={`Edit clue for ${cat.name}, ${labelPoints} points`}
-	                                title={`Edit clue for ${cat.name}, ${labelPoints} points`}
-	                                className={`relative group h-24 w-full flex items-center justify-center font-bold text-3xl rounded-b-lg transition-all duration-200 transform hover:scale-105 shadow-md ${
-	                                  hasContent
-	                                    ? 'bg-brand-primary text-black'
-	                                    : 'bg-base-300 text-brand-accent hover:bg-brand-secondary'
-	                                } ${snapshot.isDragging ? 'ring-2 ring-brand-primary' : ''}`}
-	                              >
-	                                ${labelPoints}
-	                                {hasContent && (
-	                                  <PencilIcon className="w-5 h-5 text-black absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-	                                )}
-	                              </button>
+                              <div
+                                ref={dragProvided.innerRef}
+                                {...dragProvided.draggableProps}
+                                {...dragProvided.dragHandleProps}
+                                onClick={() =>
+                                  setEditing({ categoryId: cat.id, questionId: q.id })
+                                }
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`Edit clue for ${cat.name}, ${labelPoints} points`}
+                                title={`Edit clue for ${cat.name}, ${labelPoints} points`}
+                                className={`relative group h-24 w-full flex items-center justify-center font-bold text-3xl rounded-b-lg transition-all duration-200 transform hover:scale-105 shadow-md cursor-grab active:cursor-grabbing select-none ${
+                                  hasContent
+                                    ? 'bg-brand-primary text-black'
+                                    : 'bg-base-300 text-brand-accent hover:bg-brand-secondary'
+                                } ${snapshot.isDragging ? 'ring-2 ring-brand-primary cursor-grabbing' : ''}`}
+                              >
+                                ${labelPoints}
+                                {hasContent && (
+                                  <PencilIcon className="w-5 h-5 text-black absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                )}
+                              </div>
 	                            )}
 	                          </Draggable>
 	                        );
